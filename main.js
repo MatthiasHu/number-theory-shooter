@@ -27,7 +27,7 @@ function tick(g) {
   var ns = g.nonPrimes;
   for (var i=0; i<ns.length; i++) {
     var n = ns[i];
-    n.flashPhase += 0.08;
+    n.flashPhase += 0.1;
     while (n.flashPhase >= n.primeFactors.length) {
       n.flashPhase -= n.primeFactors.length;
     }
@@ -53,9 +53,8 @@ function primeFactors(n) {
   return ps;
 }
 
-
 function draw(s, g) {
-  s.ctx.fillStyle = toColorString([0.35, 0.35, 0.35]);
+  s.ctx.fillStyle = toRGBString([0.15, 0.15, 0.15]);
   s.ctx.fillRect(0, 0, s.dim, s.dim);
 
   for (var i=0; i<g.nonPrimes.length; i++) {
@@ -65,12 +64,27 @@ function draw(s, g) {
 
 function drawNonPrime(s, n) {
   var i = Math.floor(n.flashPhase);
-  var bright = n.flashPhase-Math.floor(n.flashPhase) > 0.5 ? 1 : 0;
-  // TODO: this or that?
-  // Math.abs(Math.sin(n.flashPhase*Math.PI));
-  var color = mixColors(black, primeColor(n.primeFactors[i]), bright);
-  s.ctx.fillStyle = toColorString(color);
+  var t = n.flashPhase - i;
+  var lightRadius = 0.04 + 0.06*Math.sin(t*Math.PI);
+  var color = primeColor(n.primeFactors[i]);
+
+  spotlightAt(s, n.pos, lightRadius, color);
+
+  s.ctx.fillStyle = toRGBString(white);
   textAt(s, n.pos, n.value);
+}
+
+function spotlightAt(s, pos, radius, color) {
+  var xy = toPixelPos(s, pos);
+  var r = toPixelLength(s, radius);
+  var transparent = [color[0], color[1], color[2], 0]
+
+  var grad =
+    s.ctx.createRadialGradient(xy[0], xy[1], 0, xy[0], xy[1], r);
+  grad.addColorStop(0, toRGBString(color));
+  grad.addColorStop(1, toRGBAString(transparent));
+  s.ctx.fillStyle = grad;
+  s.ctx.fillRect(xy[0]-r, xy[1]-r, xy[0]+r, xy[1]+r);
 }
 
 function textAt(s, pos, text) {
@@ -80,6 +94,9 @@ function textAt(s, pos, text) {
 
 function toPixelPos(s, pos) {
   return [(pos.x+0.5)*s.dim, (pos.y+0.5)*s.dim];
+}
+function toPixelLength(s, l) {
+  return l*s.dim;
 }
 
 function primeColor(p) {
@@ -118,6 +135,10 @@ function mixColors(c1, c2, t) {
   return c;
 }
 
-function toColorString(color) {
+function toRGBString(color) {
   return "rgb("+color[0]*255+", "+color[1]*255+", "+color[2]*255+")";
+}
+function toRGBAString(color) {
+  return ("rgba("+color[0]*255+", "+color[1]*255+", "+color[2]*255+
+    ", "+color[3]+")");
 }
