@@ -11,7 +11,11 @@ function onLoad() {
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
 
-  var game = {nonPrimes: [newNonPrime(9230, {x: 0, y: 0})]};
+  var game = {targets:
+    [ newTarget(2, {x: 0, y: 0})
+    , newTarget(3, {x: -0.1, y: 0})
+    , newTarget(210*11, {x: 0.2, y: 0.1})]
+    };
 
   timer(game, surface);
 }
@@ -24,19 +28,24 @@ function timer(game, surface) {
 }
 
 function tick(g) {
-  var ns = g.nonPrimes;
-  for (var i=0; i<ns.length; i++) {
-    var n = ns[i];
-    n.flashPhase += 0.1;
-    while (n.flashPhase >= n.primeFactors.length) {
-      n.flashPhase -= n.primeFactors.length;
+  var tars = g.targets;
+  for (var i=0; i<tars.length; i++) {
+    var tar = tars[i];
+    tar.flashPhase += 0.1;
+    while (tar.flashPhase >= tar.primeFactors.length) {
+      tar.flashPhase -= tar.primeFactors.length;
     }
   }
 }
 
-function newNonPrime(value, pos) {
-  return { value: value, primeFactors: primeFactors(value)
-         , pos: pos, flashPhase: 0 };
+function newTarget(value, pos) {
+  var primes = primeFactors(value);
+  return (
+    { value: value
+    , primeFactors: primes
+    , isPrime: primes.length==1
+    , pos: pos
+    , flashPhase: 0 } );
 }
 
 function primeFactors(n) {
@@ -54,34 +63,53 @@ function primeFactors(n) {
 }
 
 function draw(s, g) {
-  s.ctx.fillStyle = toRGBString([0.15, 0.15, 0.15]);
+  s.ctx.fillStyle = toRGBAString([0.15, 0.15, 0.15, 1]);
   s.ctx.fillRect(0, 0, s.dim, s.dim);
 
-  for (var i=0; i<g.nonPrimes.length; i++) {
-    drawNonPrime(s, g.nonPrimes[i]);
+  for (var i=0; i<g.targets.length; i++) {
+    drawTarget(s, g.targets[i]);
+  }
+
+  // hueColorTest(s, 100);
+}
+
+function hueColorTest(s, n) {
+  var d = s.dim;
+  for (var i=0; i<n; i++) {
+    s.ctx.fillStyle = toRGBAString(colorFromHue(i/n));
+    s.ctx.fillRect(d/n*i, 0, d/n, d/8);
   }
 }
 
-function drawNonPrime(s, n) {
-  var i = Math.floor(n.flashPhase);
-  var t = n.flashPhase - i;
-  var lightRadius = 0.04 + 0.06*Math.sin(t*Math.PI);
-  var color = primeColor(n.primeFactors[i]);
+function drawTarget(s, tar) {
+  if (tar.isPrime) {
+    var color = primeColor(tar.value);
+    spotlightAt(s, tar.pos, 0.1, withAlpha(color, 0.3));
 
-  spotlightAt(s, n.pos, lightRadius, color);
+    s.ctx.fillStyle = toRGBAString(mixColors(color, white, 0.2));
+    textAt(s, tar.pos, tar.value);
+  }
+  else {
+    var i = Math.floor(tar.flashPhase);
+    var t = tar.flashPhase - i;
+    var lightRadius = 0.07 + 0.03*Math.sin(t*Math.PI);
+    var color = primeColor(tar.primeFactors[i]);
 
-  s.ctx.fillStyle = toRGBString(white);
-  textAt(s, n.pos, n.value);
+    spotlightAt(s, tar.pos, lightRadius, color);
+
+    s.ctx.fillStyle = toRGBAString(white);
+    textAt(s, tar.pos, tar.value);
+  }
 }
 
 function spotlightAt(s, pos, radius, color) {
   var xy = toPixelPos(s, pos);
   var r = toPixelLength(s, radius);
-  var transparent = [color[0], color[1], color[2], 0]
+  var transparent = withAlpha(color, 0);
 
   var grad =
     s.ctx.createRadialGradient(xy[0], xy[1], 0, xy[0], xy[1], r);
-  grad.addColorStop(0, toRGBString(color));
+  grad.addColorStop(0, toRGBAString(color));
   grad.addColorStop(1, toRGBAString(transparent));
   s.ctx.fillStyle = grad;
   s.ctx.fillRect(xy[0]-r, xy[1]-r, xy[0]+r, xy[1]+r);
@@ -110,13 +138,13 @@ var goldenAngle = 2*Math.PI/((1+Math.sqrt(5))/2);
 // 0 <= hue < 1
 function colorFromHue(hue) {
   var cs =
-    [ [1, 0, 0]
-    , [1, 1, 0]
-    , [0, 1, 0]
-    , [0, 1, 1]
-    , [0, 0, 1]
-    , [1, 0, 1]
-    , [1, 0, 0]
+    [ [1, 0, 0, 1]
+    , [1, 1, 0, 1]
+    , [0, 1, 0, 1]
+    , [0, 1, 1, 1]
+    , [0, 0, 1, 1]
+    , [1, 0, 1, 1]
+    , [1, 0, 0, 1]
     ];
   var n = cs.length - 1;
   var i = Math.floor(n*hue);
@@ -124,20 +152,20 @@ function colorFromHue(hue) {
   return mixColors(cs[i], cs[i+1], t);
 }
 
-var white = [1, 1, 1];
-var black = [0, 0, 0];
+var white = [1, 1, 1, 1];
+var black = [0, 0, 0, 1];
 
 function mixColors(c1, c2, t) {
-  var c = [0, 0, 0]
-  for (var i=0; i<3; i++) {
+  var c = [0, 0, 0, 0]
+  for (var i=0; i<4; i++) {
     c[i] = (1-t)*c1[i] + t*c2[i];
   }
   return c;
 }
-
-function toRGBString(color) {
-  return "rgb("+color[0]*255+", "+color[1]*255+", "+color[2]*255+")";
+function withAlpha(c, alpha) {
+  return [c[0], c[1], c[2], alpha];
 }
+
 function toRGBAString(color) {
   return ("rgba("+color[0]*255+", "+color[1]*255+", "+color[2]*255+
     ", "+color[3]+")");
