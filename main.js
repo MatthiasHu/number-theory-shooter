@@ -14,7 +14,8 @@ function onLoad() {
   var game = {targets:
     [ newTarget(2, {x: 0, y: 0})
     , newTarget(3, {x: -0.1, y: 0})
-    , newTarget(210*11, {x: 0.2, y: 0.1})]
+    , newTarget(5, {x: 0, y: -0.1})
+    , newTarget(2*3*5*7*11, {x: 0.2, y: 0.1})]
     };
 
   timer(game, surface);
@@ -128,12 +129,12 @@ function toPixelLength(s, l) {
 }
 
 function primeColor(p) {
-  var hue = p*goldenAngle;
+  var hue = p*goldenRatio;
   hue = hue - Math.floor(hue);
   return colorFromHue(hue);
 }
 
-var goldenAngle = 2*Math.PI/((1+Math.sqrt(5))/2);
+var goldenRatio = (1 + Math.sqrt(5)) / 2
 
 // 0 <= hue < 1
 function colorFromHue(hue) {
