@@ -6,16 +6,15 @@ function onLoad() {
   var dim = 512;
   var surface = {canvas: canvas, ctx: ctx, dim: dim}
   canvas.width = dim;
-	canvas.height = dim;
+  canvas.height = dim;
   ctx.font = (dim*0.06)+"px DUMMY";
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
 
-  var game = {targets:
-    [ newTarget(2, {x: 0, y: 0})
-    , newTarget(3, {x: -0.1, y: 0})
-    , newTarget(5, {x: 0, y: -0.1})
-    , newTarget(2*3*5*7*11, {x: 0.2, y: 0.1})]
+  var game =
+    { targets: []
+    , spawningTargets: []
+    , spawning: {phase: 0, nextValue: 2}
     };
 
   timer(game, surface);
@@ -30,13 +29,38 @@ function timer(game, surface) {
 
 function tick(g) {
   var tars = g.targets;
+  var stars = g.spawningTargets;
+
   for (var i=0; i<tars.length; i++) {
     var tar = tars[i];
-    tar.flashPhase += 0.1;
+    tar.flashPhase += 0.1232;
     while (tar.flashPhase >= tar.primeFactors.length) {
       tar.flashPhase -= tar.primeFactors.length;
     }
   }
+
+  for (var i=0; i<stars.length; i++) {
+    var star = stars[i];
+    star.flashPhase += 0.13;
+    while (star.flashPhase >= 1) {
+      star.flashPhase -= 1;
+    }
+    star.age += 1;
+    if (star.age >= 30) {
+      star.delete = true;
+      tars.push(newTarget(star.value, star.pos));
+    }
+  }
+
+  g.spawning.phase += 0.02;
+  if (g.spawning.phase >= 1) {
+    g.spawning.phase -= 1;
+    stars.push(newSpawningTarget(g.spawning.nextValue, randomPos()));
+    g.spawning.nextValue += 1;
+  }
+
+  purgeList(tars);
+  purgeList(stars);
 }
 
 function newTarget(value, pos) {
@@ -47,6 +71,26 @@ function newTarget(value, pos) {
     , isPrime: primes.length==1
     , pos: pos
     , flashPhase: 0 } );
+}
+function newSpawningTarget(value, pos) {
+  return (
+    { value: value
+    , pos: pos
+    , flashPhase: 0
+    , age: 0 } );
+}
+
+function randomPos() {
+  return {x: Math.random(), y: Math.random()};
+}
+
+function purgeList(l) {
+  for (var i=0; i<l.length; i++) {
+    if (l[i].delete == true) {
+      l.splice(i, 1);
+      i--;
+    }
+  }
 }
 
 function primeFactors(n) {
@@ -69,6 +113,9 @@ function draw(s, g) {
 
   for (var i=0; i<g.targets.length; i++) {
     drawTarget(s, g.targets[i]);
+  }
+  for (var i=0; i<g.spawningTargets.length; i++) {
+    drawSpawningTarget(s, g.spawningTargets[i]);
   }
 
   // hueColorTest(s, 100);
@@ -102,6 +149,12 @@ function drawTarget(s, tar) {
     textAt(s, tar.pos, tar.value);
   }
 }
+function drawSpawningTarget(s, star) {
+  if (star.flashPhase <= 0.5) {
+    s.ctx.fillStyle = toRGBAString(white);
+    textAt(s, star.pos, star.value);
+  }
+}
 
 function spotlightAt(s, pos, radius, color) {
   var xy = toPixelPos(s, pos);
@@ -113,7 +166,7 @@ function spotlightAt(s, pos, radius, color) {
   grad.addColorStop(0, toRGBAString(color));
   grad.addColorStop(1, toRGBAString(transparent));
   s.ctx.fillStyle = grad;
-  s.ctx.fillRect(xy[0]-r, xy[1]-r, xy[0]+r, xy[1]+r);
+  s.ctx.fillRect(xy[0]-r, xy[1]-r, 2*r, 2*r);
 }
 
 function textAt(s, pos, text) {
@@ -122,7 +175,7 @@ function textAt(s, pos, text) {
 }
 
 function toPixelPos(s, pos) {
-  return [(pos.x+0.5)*s.dim, (pos.y+0.5)*s.dim];
+  return [pos.x*s.dim, pos.y*s.dim];
 }
 function toPixelLength(s, l) {
   return l*s.dim;
