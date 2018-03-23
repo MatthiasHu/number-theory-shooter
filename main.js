@@ -13,6 +13,7 @@ function onLoad() {
 
   var game =
     { targets: []
+    , newTargets: []
     , spawningTargets: []
     , spawning: {phase: 0, nextValue: 2}
     };
@@ -48,40 +49,70 @@ function tick(g) {
     star.age += 1;
     if (star.age >= 30) {
       star.delete = true;
-      tars.push(newTarget(star.value, star.pos));
+      newTarget(g, star.value, star.pos);
     }
   }
 
-  g.spawning.phase += 0.02;
+  // target-target collisions
+  for (var i=0; i<tars.length; i++) {
+    var tar1 = tars[i];
+    if (tar1.delete == true) continue;
+    for (var j=i+1; j<tars.length; j++) {
+      var tar2 = tars[j];
+      if (tar2.delete == true) continue;
+      if (dist(tar1.pos, tar2.pos) <= 0.18) {
+        mergeTargets(g, tar1, tar2);
+      }
+    }
+  }
+
+  g.spawning.phase += 0.05;
   if (g.spawning.phase >= 1) {
     g.spawning.phase -= 1;
-    stars.push(newSpawningTarget(g.spawning.nextValue, randomPos()));
+    newSpawningTarget(g, g.spawning.nextValue, randomPos());
     g.spawning.nextValue += 1;
   }
 
   purgeList(tars);
   purgeList(stars);
+
+  g.targets = tars.concat(g.newTargets);
+  g.newTargets = [];
 }
 
-function newTarget(value, pos) {
+function newTarget(g, value, pos) {
   var primes = primeFactors(value);
-  return (
+  g.newTargets.push(
     { value: value
     , primeFactors: primes
     , isPrime: primes.length==1
     , pos: pos
     , flashPhase: 0 } );
 }
-function newSpawningTarget(value, pos) {
-  return (
+function newSpawningTarget(g, value, pos) {
+  g.spawningTargets.push(
     { value: value
     , pos: pos
     , flashPhase: 0
     , age: 0 } );
 }
 
+function mergeTargets(g, tar1, tar2) {
+  console.log("merge");
+  tar1.delete = true;
+  tar2.delete = true;
+  newTarget(g, tar1.value+tar2.value, centerPos(tar1.pos, tar2.pos));
+}
+
 function randomPos() {
   return {x: Math.random(), y: Math.random()};
+}
+function centerPos(p1, p2) {
+  return {x: (p1.x+p2.x)/2, y: (p1.y+p2.y)/2};
+}
+
+function dist(p1, p2) {
+  return Math.sqrt((p1.x-p2.x)*(p1.x-p2.x) + (p1.y-p2.y)*(p1.y-p2.y));
 }
 
 function purgeList(l) {
