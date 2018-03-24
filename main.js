@@ -3,8 +3,13 @@
 function onLoad() {
   var canvas = document.getElementById("game-canvas")
   var ctx = canvas.getContext("2d");
-  var dim = 512;
-  var surface = {canvas: canvas, ctx: ctx, dim: dim}
+  var dim = 800;
+  var surface =
+    { canvas: canvas
+    , ctx: ctx
+    , dim: dim
+    , center: {x: 0, y: 0}
+    };
   canvas.width = dim;
   canvas.height = dim;
   ctx.font = (dim*0.06)+"px DUMMY";
@@ -16,21 +21,67 @@ function onLoad() {
     , newTargets: []
     , spawningTargets: []
     , spawning: {phase: 0, nextValue: 2}
+    , me:
+      { pos: {x: 0, y: 0}
+      , v: {x: 0, y: 0}
+      }
     };
 
-  timer(game, surface);
+  var input =
+    { keysDown: {}
+    , keyCodes:
+      { up: 87     // 87 is W
+      , down: 83   // 83 is S
+      , left: 65   // 65 is A
+      , right: 68  // 68 is D
+      }
+    , clicks: []
+    };
+
+  document.addEventListener("keydown",
+    function(e) {onKeyDown(input, e);} );
+  document.addEventListener("keyup",
+    function(e) {onKeyUp(input, e);} );
+  canvas.addEventListener("mousedown",
+    function(e) {onMouseDown(game, surface, input, e);} );
+
+  timer(game, surface, input);
 }
 
-function timer(game, surface) {
-  tick(game);
+function onKeyDown(input, e) {
+  input.keysDown[e.keyCode] = true;
+}
+function onKeyUp(input, e) {
+  input.keysDown[e.keyCode] = false;
+}
+function onMouseDown(g, s, input, e) {
+  if (e.button==0) {
+    // save click position relative to me.pos
+    var p = fromPixelPos(s, [e.offsetX, e.offsetY]);
+    p = normalizePos(diffPos(s.center, p));
+    var mp = normalizePos(diffPos(s.center, g.me.pos));
+    input.clicks.push(diffPos(mp, p));
+  }
+}
+
+function timer(game, surface, input) {
+  tick(game, input);
+  surface.center = lerp(surface.center, game.me.pos, 0.1);
   draw(surface, game);
 
-  setTimeout(function() {timer(game, surface);}, 30);
+  setTimeout(function() {timer(game, surface, input);}, 30);
 }
 
-function tick(g) {
+function tick(g, input) {
   var tars = g.targets;
   var stars = g.spawningTargets;
+
+  g.me.v = addPos(g.me.v, scalePos(inputMovement(input), 0.01));
+  g.me.v = scalePos(g.me.v, 0.8);
+  g.me.pos = addPos(g.me.pos, g.me.v);
+
+  input.clicks.forEach(function(v) {shoot(g, v);});
+  input.clicks = [];
 
   for (var i=0; i<tars.length; i++) {
     var tar = tars[i];
@@ -66,7 +117,7 @@ function tick(g) {
     }
   }
 
-  g.spawning.phase += 0.05;
+  g.spawning.phase += 0.02;
   if (g.spawning.phase >= 1) {
     g.spawning.phase -= 1;
     newSpawningTarget(g, g.spawning.nextValue, randomPos());
@@ -78,6 +129,24 @@ function tick(g) {
 
   g.targets = tars.concat(g.newTargets);
   g.newTargets = [];
+}
+
+function inputMovement(input) {
+  var k = input.keysDown;
+  var c = input.keyCodes;
+  return (
+    { x: (k[c.left]==true ? -1 : 0) + (k[c.right]==true ? 1 : 0)
+    , y: (k[c.up  ]==true ? -1 : 0) + (k[c.down ]==true ? 1 : 0)
+    } );
+}
+
+function shoot(g, v) {
+  var l = lengthPos(v);
+  if (l > 0.001) {
+    v = scalePos(v, 1/l);
+    console.log(v);
+    // TODO: go on here
+  }
 }
 
 function newTarget(g, value, pos) {
@@ -98,21 +167,49 @@ function newSpawningTarget(g, value, pos) {
 }
 
 function mergeTargets(g, tar1, tar2) {
-  console.log("merge");
   tar1.delete = true;
   tar2.delete = true;
-  newTarget(g, tar1.value+tar2.value, centerPos(tar1.pos, tar2.pos));
+  newTarget(g, tar1.value+tar2.value, lerp(tar1.pos, tar2.pos, 0.5));
 }
 
 function randomPos() {
-  return {x: Math.random(), y: Math.random()};
-}
-function centerPos(p1, p2) {
-  return {x: (p1.x+p2.x)/2, y: (p1.y+p2.y)/2};
+  return {x: Math.random()-0.5, y: Math.random()-0.5};
 }
 
+function addPos(pos, v) {
+  return {x: pos.x+v.x, y: pos.y+v.y};
+}
+function scalePos(v, s) {
+  return {x: v.x*s, y: v.y*s};
+}
+function diffPos(p1, p2) {
+  return {x: p2.x-p1.x, y: p2.y-p1.y};
+}
+function lerp(p1, p2, t) {
+  var d = normalizePos(diffPos(p1, p2));
+  return addPos(p1, scalePos(d, t));
+}
 function dist(p1, p2) {
-  return Math.sqrt((p1.x-p2.x)*(p1.x-p2.x) + (p1.y-p2.y)*(p1.y-p2.y));
+  return lengthPos(normalizePos(diffPos(p1, p2)));
+}
+function normalizePos(pos) {
+  return ( { x: pos.x-Math.floor(pos.x+0.5)
+           , y: pos.y-Math.floor(pos.y+0.5) } );
+}
+function lengthPos(v) {
+  return Math.sqrt(v.x*v.x + v.y*v.y);
+}
+
+function normalizedPoses(pos) {
+  var npos = normalizePos(pos);
+  var x = npos.x, y = npos.y;
+  var xx = x>0 ? x-1 : x+1;
+  var yy = y>0 ? y-1 : y+1;
+  return (
+    [ {x: x , y: y }
+    , {x: x , y: yy}
+    , {x: xx, y: y }
+    , {x: xx, y: yy} ] );
 }
 
 function purgeList(l) {
@@ -148,6 +245,8 @@ function draw(s, g) {
   for (var i=0; i<g.spawningTargets.length; i++) {
     drawSpawningTarget(s, g.spawningTargets[i]);
   }
+
+  drawMe(s, g.me);
 
   // hueColorTest(s, 100);
 }
@@ -186,30 +285,52 @@ function drawSpawningTarget(s, star) {
     textAt(s, star.pos, star.value);
   }
 }
+function drawMe(s, me) {
+  s.ctx.strokeStyle = toRGBAString(white);
+  circleAt(s, me.pos, 0.06);
+}
 
 function spotlightAt(s, pos, radius, color) {
-  var xy = toPixelPos(s, pos);
+  var xys = toPixelPoses(s, pos);
   var r = toPixelLength(s, radius);
   var transparent = withAlpha(color, 0);
 
-  var grad =
-    s.ctx.createRadialGradient(xy[0], xy[1], 0, xy[0], xy[1], r);
-  grad.addColorStop(0, toRGBAString(color));
-  grad.addColorStop(1, toRGBAString(transparent));
-  s.ctx.fillStyle = grad;
-  s.ctx.fillRect(xy[0]-r, xy[1]-r, 2*r, 2*r);
+  xys.forEach(function(xy) {
+    var grad =
+      s.ctx.createRadialGradient(xy[0], xy[1], 0, xy[0], xy[1], r);
+    grad.addColorStop(0, toRGBAString(color));
+    grad.addColorStop(1, toRGBAString(transparent));
+    s.ctx.fillStyle = grad;
+    s.ctx.fillRect(xy[0]-r, xy[1]-r, 2*r, 2*r);
+  });
 }
-
 function textAt(s, pos, text) {
-  var xy = toPixelPos(s, pos);
-  s.ctx.fillText(text, xy[0], xy[1]);
+  var xys = toPixelPoses(s, pos);
+  xys.forEach(function(xy) {
+    s.ctx.fillText(text, xy[0], xy[1]);
+  });
+}
+function circleAt(s, pos, radius) {
+  var xys = toPixelPoses(s, pos);
+  var r = toPixelLength(s, radius);
+  xys.forEach(function(xy) {
+    s.ctx.beginPath();
+    s.ctx.arc(xy[0], xy[1], r, 0, 2*Math.PI);
+    s.ctx.stroke();
+  });
 }
 
-function toPixelPos(s, pos) {
-  return [pos.x*s.dim, pos.y*s.dim];
+function toPixelPoses(s, pos) {
+  var nps = normalizedPoses(diffPos(s.center, pos));
+  return nps.map(
+    function(p) {return [(p.x+0.5)*s.dim, (p.y+0.5)*s.dim];} );
 }
 function toPixelLength(s, l) {
   return l*s.dim;
+}
+function fromPixelPos(s, xy) {
+  return addPos(s.center, { x: xy[0]/s.dim - 0.5
+                          , y: xy[1]/s.dim - 0.5 });
 }
 
 function primeColor(p) {
