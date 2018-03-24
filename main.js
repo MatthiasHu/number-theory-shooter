@@ -305,10 +305,9 @@ function primeFactors(n) {
   var p = 1;
   while (n>1) {
     p += 1;
-    if (n % p == 0) {
+    while (n % p == 0) {
       ps.push(p);
       n = n/p;
-      p = 1;
     }
   }
   return ps;
