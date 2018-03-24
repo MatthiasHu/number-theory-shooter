@@ -143,8 +143,9 @@ function tick(g, input) {
     if (tar1.delete == true) continue;
     for (var j=i+1; j<tars.length; j++) {
       var tar2 = tars[j];
-      if (tar2.delete == true) continue;
-      if ( !(tar1.recentlyExploded > 0 && tar2.recentlyExploded > 0)
+      if (    !(tar1.delete == true)
+           && !(tar2.delete == true)
+           && !(tar1.recentlyExploded > 0 && tar2.recentlyExploded > 0)
            && dist(tar1.pos, tar2.pos) <= 0.18
          ) {
         mergeTargets(g, tar1, tar2);
