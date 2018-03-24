@@ -317,6 +317,8 @@ function draw(s, g) {
   s.ctx.fillStyle = toRGBAString([0.15, 0.15, 0.15, 1]);
   s.ctx.fillRect(0, 0, s.dim, s.dim);
 
+  drawBackground(s);
+
   g.targets.forEach(function(tar) {
     drawTarget(s, tar);
   });
@@ -342,6 +344,12 @@ function hueColorTest(s, n) {
   }
 }
 
+function drawBackground(s) {
+  s.ctx.strokeStyle = toRGBAString(grey(0.3));
+  lineAt(s, {x: 0, y:0}, {x:  0.5, y:  0.5});
+  lineAt(s, {x: 0, y:0}, {x:  0.5, y: -0.5});
+  lineAt(s, {x: 0, y:0}, {x: -0.5, y:  0.5});
+}
 function drawTarget(s, tar) {
   if (tar.isPrime) {
     var color = primeColor(tar.value);
@@ -377,6 +385,15 @@ function drawMe(s, me) {
   circleAt(s, me.pos, 0.06);
 }
 
+function lineAt(s, pos, v) {
+  toPixelPoses(s, pos).forEach(function(xy) {
+    s.ctx.beginPath();
+    s.ctx.moveTo(xy[0], xy[1]);
+    s.ctx.lineTo( xy[0] + toPixelLength(s, v.x)
+                , xy[1] + toPixelLength(s, v.y) );
+    s.ctx.stroke();
+  });
+}
 function spotlightAt(s, pos, radius, color) {
   var xys = toPixelPoses(s, pos);
   var r = toPixelLength(s, radius);
@@ -457,6 +474,9 @@ function colorFromHue(hue) {
 
 var white = [1, 1, 1, 1];
 var black = [0, 0, 0, 1];
+function grey(s) {
+  return [s, s, s, 1];
+}
 
 function mixColors(c1, c2, t) {
   var c = [0, 0, 0, 0]
