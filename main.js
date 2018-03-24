@@ -25,6 +25,8 @@ function onLoad() {
       { pos: {x: 0, y: 0}
       , v: {x: 0, y: 0}
       }
+    , bullets: []
+    , newBullets: []
     };
 
   var input =
@@ -75,24 +77,37 @@ function timer(game, surface, input) {
 function tick(g, input) {
   var tars = g.targets;
   var stars = g.spawningTargets;
+  var bulls = g.bullets;
 
   g.me.v = addPos(g.me.v, scalePos(inputMovement(input), 0.01));
-  g.me.v = scalePos(g.me.v, 0.8);
+  g.me.v = scalePos(g.me.v, 0.7);
   g.me.pos = addPos(g.me.pos, g.me.v);
 
   input.clicks.forEach(function(v) {shoot(g, v);});
   input.clicks = [];
 
-  for (var i=0; i<tars.length; i++) {
-    var tar = tars[i];
+  tars.forEach(function(tar) {
     tar.flashPhase += 0.1232;
     while (tar.flashPhase >= tar.primeFactors.length) {
       tar.flashPhase -= tar.primeFactors.length;
     }
-  }
+    if (tar.recentlyExploded > 0) {
+      tar.recentlyExploded -= 0.1;
+    }
+    var d = normalizePos(diffPos(g.me.pos, tar.pos));
+    var dl = lengthPos(d);
+    if (dl < 0.4) {
+      tar.v = addPos(tar.v, scalePos(d, -0.00001/dl/dl/dl));
+      if (dl <= 0.1) {
+        tar.delete = true;
+        // TODO: do more here
+      }
+    }
+    tar.pos = addPos(tar.pos, tar.v);
+    tar.v = scalePos(tar.v, 0.98);
+  });
 
-  for (var i=0; i<stars.length; i++) {
-    var star = stars[i];
+  stars.forEach(function(star) {
     star.flashPhase += 0.13;
     while (star.flashPhase >= 1) {
       star.flashPhase -= 1;
@@ -102,7 +117,25 @@ function tick(g, input) {
       star.delete = true;
       newTarget(g, star.value, star.pos);
     }
-  }
+  });
+
+  bulls.forEach(function(bull) {
+    bull.pos = addPos(bull.pos, bull.v);
+  });
+
+  // target-bullet collisions
+  bulls.forEach(function(bull) {
+    tars.forEach(function(tar) {
+      if (    !(bull.delete==true)
+           && !(tar.delete==true)
+           && dist(bull.pos, tar.pos) <= 0.1
+           && bull.value <= tar.primeFactors.length
+         ) {
+        bull.delete = true;
+        explodeTarget(g, tar, bull.value);
+      }
+    });
+  });
 
   // target-target collisions
   for (var i=0; i<tars.length; i++) {
@@ -111,13 +144,15 @@ function tick(g, input) {
     for (var j=i+1; j<tars.length; j++) {
       var tar2 = tars[j];
       if (tar2.delete == true) continue;
-      if (dist(tar1.pos, tar2.pos) <= 0.18) {
+      if ( !(tar1.recentlyExploded > 0 && tar2.recentlyExploded > 0)
+           && dist(tar1.pos, tar2.pos) <= 0.18
+         ) {
         mergeTargets(g, tar1, tar2);
       }
     }
   }
 
-  g.spawning.phase += 0.02;
+  g.spawning.phase += 0.01;
   if (g.spawning.phase >= 1) {
     g.spawning.phase -= 1;
     newSpawningTarget(g, g.spawning.nextValue, randomPos());
@@ -126,9 +161,12 @@ function tick(g, input) {
 
   purgeList(tars);
   purgeList(stars);
+  purgeList(bulls);
 
   g.targets = tars.concat(g.newTargets);
   g.newTargets = [];
+  g.bullets = bulls.concat(g.newBullets);
+  g.newBullets = [];
 }
 
 function inputMovement(input) {
@@ -144,19 +182,20 @@ function shoot(g, v) {
   var l = lengthPos(v);
   if (l > 0.001) {
     v = scalePos(v, 1/l);
-    console.log(v);
-    // TODO: go on here
+    newBullet(g, 2, g.me.pos, scalePos(v, 0.06));
   }
 }
 
-function newTarget(g, value, pos) {
+function newTarget(g, value, pos, v={x:0, y:0}, recentlyExploded=0) {
   var primes = primeFactors(value);
   g.newTargets.push(
     { value: value
     , primeFactors: primes
     , isPrime: primes.length==1
     , pos: pos
-    , flashPhase: 0 } );
+    , flashPhase: 0
+    , v: {x:v.x, y:v.y}
+    , recentlyExploded: recentlyExploded } );
 }
 function newSpawningTarget(g, value, pos) {
   g.spawningTargets.push(
@@ -165,17 +204,57 @@ function newSpawningTarget(g, value, pos) {
     , flashPhase: 0
     , age: 0 } );
 }
+function newBullet(g, value, pos, v) {
+  g.newBullets.push(
+    { value: value
+    , pos: pos
+    , v: v
+    , angle: Math.atan2(v.y, v.x) } );
+}
 
+function explodeTarget(g, tar, k) {
+  tar.delete = true;
+
+  var ps = tar.primeFactors;
+  shuffleArray(ps);
+  var factors = [];
+  for (var i=0; i<k; i++) {
+    factors.push(ps[i]);
+  }
+  for (var i=k; i<ps.length; i++) {
+    factors[Math.floor(Math.random()*k)] *= ps[i];
+  }
+
+  var alpha = Math.random()*2*Math.PI;
+  function vel(i) {
+    return scalePos(circlePos(alpha + i/k*2*Math.PI), 0.015);
+  }
+  factors.forEach(function(value, i) {
+    newTarget(g, value, tar.pos, addPos(tar.v, vel(i)), 1);
+  });
+}
 function mergeTargets(g, tar1, tar2) {
   tar1.delete = true;
   tar2.delete = true;
-  newTarget(g, tar1.value+tar2.value, lerp(tar1.pos, tar2.pos, 0.5));
+  newTarget(g, tar1.value+tar2.value,
+    lerp(tar1.pos, tar2.pos, 0.5), lerp(tar1.v, tar2.v, 0.5));
+}
+
+function shuffleArray(a) {
+  for (var i=a.length-1; i>0; i--) {
+    var j = Math.floor(Math.random()*(i+1));
+    var tmp = a[i];
+    a[i] = a[j];
+    a[j] = tmp;
+  }
 }
 
 function randomPos() {
   return {x: Math.random()-0.5, y: Math.random()-0.5};
 }
-
+function circlePos(alpha) {
+  return {x: Math.cos(alpha), y: Math.sin(alpha)};
+}
 function addPos(pos, v) {
   return {x: pos.x+v.x, y: pos.y+v.y};
 }
@@ -239,12 +318,17 @@ function draw(s, g) {
   s.ctx.fillStyle = toRGBAString([0.15, 0.15, 0.15, 1]);
   s.ctx.fillRect(0, 0, s.dim, s.dim);
 
-  for (var i=0; i<g.targets.length; i++) {
-    drawTarget(s, g.targets[i]);
-  }
-  for (var i=0; i<g.spawningTargets.length; i++) {
-    drawSpawningTarget(s, g.spawningTargets[i]);
-  }
+  g.targets.forEach(function(tar) {
+    drawTarget(s, tar);
+  });
+
+  g.spawningTargets.forEach(function(star) {
+    drawSpawningTarget(s, star);
+  });
+
+  g.bullets.forEach(function(bull) {
+    drawBullet(s, bull);
+  });
 
   drawMe(s, g.me);
 
@@ -285,6 +369,10 @@ function drawSpawningTarget(s, star) {
     textAt(s, star.pos, star.value);
   }
 }
+function drawBullet(s, bull) {
+  s.ctx.fillStyle = toRGBAString(white);
+  rotatedTextAt(s, bull.pos, bull.angle, bull.value);
+}
 function drawMe(s, me) {
   s.ctx.strokeStyle = toRGBAString(white);
   circleAt(s, me.pos, 0.06);
@@ -308,6 +396,16 @@ function textAt(s, pos, text) {
   var xys = toPixelPoses(s, pos);
   xys.forEach(function(xy) {
     s.ctx.fillText(text, xy[0], xy[1]);
+  });
+}
+function rotatedTextAt(s, pos, angle, text) {
+  var xys = toPixelPoses(s, pos);
+  xys.forEach(function(xy) {
+    s.ctx.save();
+    s.ctx.translate(xy[0], xy[1]);
+    s.ctx.rotate(angle+Math.PI/2);
+    s.ctx.fillText(text, 0, 0);
+    s.ctx.restore();
   });
 }
 function circleAt(s, pos, radius) {
