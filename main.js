@@ -31,6 +31,8 @@ function onLoad() {
     , deathIndicator: {phase: -1, intensity: 0}
     , bullets: []
     , newBullets: []
+    , fadingAmmos: []
+    , newFadingAmmos: []
     };
 
   var input =
@@ -58,8 +60,7 @@ function onKeyDown(input, e) {
   input.keysDown[e.keyCode] = true;
 }
 function onKeyUp(input, e) {
-  input.keysDown[e.keyCode] = false;
-}
+  input.keysDown[e.keyCode] = false; }
 function onMouseDown(g, s, input, e) {
   if (e.button==0) {
     // save click position relative to me.pos
@@ -82,6 +83,7 @@ function tick(g, input) {
   var tars = g.targets;
   var stars = g.spawningTargets;
   var bulls = g.bullets;
+  var fammos = g.fadingAmmos;
 
   g.me.v = addPos(g.me.v, scalePos(inputMovement(input), 0.01));
   g.me.v = scalePos(g.me.v, 0.7);
@@ -121,6 +123,18 @@ function tick(g, input) {
 
   bulls.forEach(function(bull) {
     bull.pos = addPos(bull.pos, bull.v);
+    bull.age += 1;
+    if (bull.age >= 100) {
+      bull.delete = true;
+    }
+  });
+
+  fammos.forEach(function(fammo) {
+    fammo.pos = addPos(fammo.pos, fammo.v);
+    fammo.age += 0.05;
+    if (fammo.age >= 1) {
+      fammo.delete = true;
+    }
   });
 
   // target-bullet collisions
@@ -162,6 +176,17 @@ function tick(g, input) {
     }
   });
 
+  // bullet-me collisions
+  bulls.forEach(function(bull) {
+    if (colliding(bull, g.me)) {
+      bull.delete = true;
+      g.me.v = addPos(g.me.v, scalePos(bull.v, 0.8));
+      for (var i=0; i<bull.value; i++) {
+        dropAmmo(g);
+      }
+    }
+  });
+
   g.spawning.phase += 0.01;
   if (g.spawning.phase >= 1) {
     g.spawning.phase -= 1;
@@ -172,11 +197,14 @@ function tick(g, input) {
   purgeList(tars);
   purgeList(stars);
   purgeList(bulls);
+  purgeList(fammos);
 
   g.targets = tars.concat(g.newTargets);
   g.newTargets = [];
   g.bullets = bulls.concat(g.newBullets);
   g.newBullets = [];
+  g.fadingAmmos = fammos.concat(g.newFadingAmmos);
+  g.newFadingAmmos = [];
 }
 
 function inputMovement(input) {
@@ -220,7 +248,15 @@ function newBullet(g, value, pos, v) {
     , pos: pos
     , v: v
     , radius: 0.04
+    , age: 0
     , angle: Math.atan2(v.y, v.x) } );
+}
+function newFadingAmmo(g, value, pos) {
+  g.newFadingAmmos.push(
+    { value: value
+    , pos: pos
+    , v: scalePos(circlePos(Math.random()*2*Math.PI), 0.01)
+    , age: 0 } );
 }
 
 function colliding(a, b) {
@@ -258,6 +294,13 @@ function mergeTargets(g, tar1, tar2) {
   tar1.delete = true;
   tar2.delete = true;
   newTarget(g, tar1.value+tar2.value, lerp(tar1.pos, tar2.pos, 0.5), lerp(tar1.v, tar2.v, 0.5));
+}
+
+function dropAmmo(g) {
+  if (g.me.ammo.length > 0) {
+    var value = g.me.ammo.pop();
+    newFadingAmmo(g, value, g.me.pos);
+  }
 }
 
 function shuffleArray(a) {
@@ -353,6 +396,10 @@ function draw(s, g) {
 
   drawMe(s, g.me);
 
+  g.fadingAmmos.forEach(function(fammo) {
+    drawFadingAmmo(s, fammo);
+  });
+
   drawLives(s, g.me.lives);
 
   // hueColorTest(s, 100);
@@ -405,6 +452,10 @@ function drawSpawningTarget(s, star) {
 function drawBullet(s, bull) {
   s.ctx.fillStyle = toRGBAString(white);
   textAt(s, bull.pos, bull.value, 1, bull.angle+Math.PI/2);
+}
+function drawFadingAmmo(s, fammo) {
+  s.ctx.fillStyle = toRGBAString(withAlpha(white, 1-fammo.age));
+  textAt(s, fammo.pos, fammo.value, 0.5);
 }
 function drawMe(s, me) {
   spotlightAt(s, me.pos, 0.06, white);
