@@ -24,6 +24,9 @@ function onLoad() {
     , me:
       { pos: {x: 0, y: 0}
       , v: {x: 0, y: 0}
+      , radius: 0.04
+      , lives: 3
+      , ammo: []
       }
     , bullets: []
     , newBullets: []
@@ -91,17 +94,10 @@ function tick(g, input) {
     while (tar.flashPhase >= tar.primeFactors.length) {
       tar.flashPhase -= tar.primeFactors.length;
     }
-    if (tar.recentlyExploded > 0) {
-      tar.recentlyExploded -= 0.1;
-    }
     var d = normalizePos(diffPos(g.me.pos, tar.pos));
     var dl = lengthPos(d);
     if (dl < 0.4) {
       tar.v = addPos(tar.v, scalePos(d, -0.00001/dl/dl/dl));
-      if (dl <= 0.1) {
-        tar.delete = true;
-        // TODO: do more here
-      }
     }
     tar.pos = addPos(tar.pos, tar.v);
     tar.v = scalePos(tar.v, 0.98);
@@ -126,9 +122,7 @@ function tick(g, input) {
   // target-bullet collisions
   bulls.forEach(function(bull) {
     tars.forEach(function(tar) {
-      if (    !(bull.delete==true)
-           && !(tar.delete==true)
-           && dist(bull.pos, tar.pos) <= 0.1
+      if (    colliding(bull, tar)
            && bull.value <= tar.primeFactors.length
          ) {
         bull.delete = true;
@@ -143,15 +137,25 @@ function tick(g, input) {
     if (tar1.delete == true) continue;
     for (var j=i+1; j<tars.length; j++) {
       var tar2 = tars[j];
-      if (    !(tar1.delete == true)
-           && !(tar2.delete == true)
-           && !(tar1.recentlyExploded > 0 && tar2.recentlyExploded > 0)
-           && dist(tar1.pos, tar2.pos) <= 0.18
-         ) {
+      if (colliding(tar1, tar2)) {
         mergeTargets(g, tar1, tar2);
       }
     }
   }
+
+  // target-me collisions
+  tars.forEach(function(tar) {
+    if (colliding(g.me, tar)) {
+      if (tar.isPrime) {
+        tar.delete = true;
+        g.me.ammo.push(tar.value);
+      }
+      else {
+        g.me.lives -= 1;
+        explodeTarget(g, tar, tar.primeFactors.length);
+      }
+    }
+  });
 
   g.spawning.phase += 0.01;
   if (g.spawning.phase >= 1) {
@@ -181,22 +185,22 @@ function inputMovement(input) {
 
 function shoot(g, v) {
   var l = lengthPos(v);
-  if (l > 0.001) {
+  if (l > 0.001 && g.me.ammo.length>0) {
     v = scalePos(v, 1/l);
-    newBullet(g, 2, g.me.pos, scalePos(v, 0.06));
+    newBullet(g, g.me.ammo.pop(), g.me.pos, scalePos(v, 0.06));
   }
 }
 
-function newTarget(g, value, pos, v={x:0, y:0}, recentlyExploded=0) {
+function newTarget(g, value, pos, v={x:0, y:0}) {
   var primes = primeFactors(value);
   g.newTargets.push(
     { value: value
     , primeFactors: primes
     , isPrime: primes.length==1
     , pos: pos
-    , flashPhase: 0
     , v: {x:v.x, y:v.y}
-    , recentlyExploded: recentlyExploded } );
+    , radius: 0.06
+    , flashPhase: 0 } );
 }
 function newSpawningTarget(g, value, pos) {
   g.spawningTargets.push(
@@ -210,7 +214,18 @@ function newBullet(g, value, pos, v) {
     { value: value
     , pos: pos
     , v: v
+    , radius: 0.04
     , angle: Math.atan2(v.y, v.x) } );
+}
+
+function colliding(a, b) {
+  var d = normalizePos(diffPos(a.pos, b.pos));
+  var dl = lengthPos(d);
+  return (
+       !(a.delete==true) && !(b.delete==true)
+    && dl < a.radius+b.radius
+    && dotPos(diffPos(a.v, b.v), scalePos(d, 1/dl)) < 0.001
+    );
 }
 
 function explodeTarget(g, tar, k) {
@@ -237,8 +252,7 @@ function explodeTarget(g, tar, k) {
 function mergeTargets(g, tar1, tar2) {
   tar1.delete = true;
   tar2.delete = true;
-  newTarget(g, tar1.value+tar2.value,
-    lerp(tar1.pos, tar2.pos, 0.5), lerp(tar1.v, tar2.v, 0.5));
+  newTarget(g, tar1.value+tar2.value, lerp(tar1.pos, tar2.pos, 0.5), lerp(tar1.v, tar2.v, 0.5));
 }
 
 function shuffleArray(a) {
@@ -254,7 +268,7 @@ function randomPos() {
   return {x: Math.random()-0.5, y: Math.random()-0.5};
 }
 function circlePos(alpha) {
-  return {x: Math.cos(alpha), y: Math.sin(alpha)};
+  return {x: Math.cos(alpha), y: -Math.sin(alpha)};
 }
 function addPos(pos, v) {
   return {x: pos.x+v.x, y: pos.y+v.y};
@@ -278,6 +292,9 @@ function normalizePos(pos) {
 }
 function lengthPos(v) {
   return Math.sqrt(v.x*v.x + v.y*v.y);
+}
+function dotPos(v1, v2) {
+  return v1.x*v2.x + v1.y*v2.y;
 }
 
 function normalizedPoses(pos) {
@@ -334,6 +351,8 @@ function draw(s, g) {
 
   drawMe(s, g.me);
 
+  drawLives(s, g.me.lives);
+
   // hueColorTest(s, 100);
 }
 
@@ -379,11 +398,33 @@ function drawSpawningTarget(s, star) {
 }
 function drawBullet(s, bull) {
   s.ctx.fillStyle = toRGBAString(white);
-  rotatedTextAt(s, bull.pos, bull.angle, bull.value);
+  textAt(s, bull.pos, bull.value, 1, bull.angle+Math.PI/2);
 }
 function drawMe(s, me) {
   s.ctx.strokeStyle = toRGBAString(white);
-  circleAt(s, me.pos, 0.06);
+  circleAt(s, me.pos, 0.04);
+
+  s.ctx.fillStyle = toRGBAString(grey(0.8));
+  var n = me.ammo.length;
+  if (n > 0) {
+    textAt(s, me.pos, me.ammo[n-1], 0.75);
+  }
+  function f(k) {return 1 - (1/(1 + 0.1*k));}
+  for (var i=1; i<n; i++) {
+    var t = f(i-1);
+    var dt = f(i) - t;
+    var pos = scalePos(circlePos(t*2*Math.PI), 0.04);
+    var scale = dt * 6;
+    textAt(s, addPos(me.pos, pos), me.ammo[n-1-i], scale);
+  }
+}
+function drawLives(s, n) {
+  s.ctx.fillStyle = "red";
+  for (var i=0; i<n; i++) {
+    s.ctx.beginPath();
+    s.ctx.arc((0.03*(i+1))*s.dim, 0.03*s.dim, 0.01*s.dim, 0, 2*Math.PI);
+    s.ctx.fill();
+  }
 }
 
 function lineAt(s, pos, v) {
@@ -409,18 +450,13 @@ function spotlightAt(s, pos, radius, color) {
     s.ctx.fillRect(xy[0]-r, xy[1]-r, 2*r, 2*r);
   });
 }
-function textAt(s, pos, text) {
-  var xys = toPixelPoses(s, pos);
-  xys.forEach(function(xy) {
-    s.ctx.fillText(text, xy[0], xy[1]);
-  });
-}
-function rotatedTextAt(s, pos, angle, text) {
+function textAt(s, pos, text, scale=1, angle=0) {
   var xys = toPixelPoses(s, pos);
   xys.forEach(function(xy) {
     s.ctx.save();
     s.ctx.translate(xy[0], xy[1]);
-    s.ctx.rotate(angle+Math.PI/2);
+    s.ctx.scale(scale, scale);
+    s.ctx.rotate(angle);
     s.ctx.fillText(text, 0, 0);
     s.ctx.restore();
   });
