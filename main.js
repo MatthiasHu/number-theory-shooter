@@ -22,7 +22,7 @@ function onLoad() {
     , spawningTargets: []
     , spawning: {phase: 0, nextValue: 2}
     , me:
-      { pos: {x: 0, y: 0}
+      { pos: {x: Math.random(), y: Math.random()}
       , v: {x: 0, y: 0}
       , radius: 0.04
       , lives: 3
