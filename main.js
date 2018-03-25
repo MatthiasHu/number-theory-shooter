@@ -28,6 +28,7 @@ function onLoad() {
       , lives: 3
       , ammo: []
       }
+    , deathIndicator: {phase: -1, intensity: 0}
     , bullets: []
     , newBullets: []
     };
@@ -88,6 +89,9 @@ function tick(g, input) {
 
   input.clicks.forEach(function(v) {shoot(g, v);});
   input.clicks = [];
+
+  g.deathIndicator.intensity *= 0.8;
+  g.deathIndicator.phase *= -1;
 
   tars.forEach(function(tar) {
     tar.flashPhase += 0.1232;
@@ -152,6 +156,7 @@ function tick(g, input) {
       }
       else {
         g.me.lives -= 1;
+        g.deathIndicator.intensity = 1;
         explodeTarget(g, tar, tar.primeFactors.length);
       }
     }
@@ -332,10 +337,7 @@ function primeFactors(n) {
 }
 
 function draw(s, g) {
-  s.ctx.fillStyle = toRGBAString([0.15, 0.15, 0.15, 1]);
-  s.ctx.fillRect(0, 0, s.dim, s.dim);
-
-  drawBackground(s);
+  drawBackground(s, g);
 
   g.targets.forEach(function(tar) {
     drawTarget(s, tar);
@@ -364,7 +366,11 @@ function hueColorTest(s, n) {
   }
 }
 
-function drawBackground(s) {
+function drawBackground(s, g) {
+  var bg = 1 + g.deathIndicator.phase * g.deathIndicator.intensity;
+  s.ctx.fillStyle = toRGBAString(grey(0.15*bg));
+  s.ctx.fillRect(0, 0, s.dim, s.dim);
+
   s.ctx.strokeStyle = toRGBAString(grey(0.3));
   lineAt(s, {x: 0, y:0}, {x:  0.5, y:  0.5});
   lineAt(s, {x: 0, y:0}, {x:  0.5, y: -0.5});
@@ -401,10 +407,13 @@ function drawBullet(s, bull) {
   textAt(s, bull.pos, bull.value, 1, bull.angle+Math.PI/2);
 }
 function drawMe(s, me) {
-  s.ctx.strokeStyle = toRGBAString(white);
-  circleAt(s, me.pos, 0.04);
+  spotlightAt(s, me.pos, 0.06, white);
+  s.ctx.fillStyle = toRGBAString(grey(0.1));
+  filledCircleAt(s, me.pos, 0.05);
+  s.ctx.strokeStyle = toRGBAString(grey(0.2));
+  circleAt(s, me.pos, 0.03);
 
-  s.ctx.fillStyle = toRGBAString(grey(0.8));
+  s.ctx.fillStyle = toRGBAString(white);
   var n = me.ammo.length;
   if (n > 0) {
     textAt(s, me.pos, me.ammo[n-1], 0.75);
@@ -468,6 +477,15 @@ function circleAt(s, pos, radius) {
     s.ctx.beginPath();
     s.ctx.arc(xy[0], xy[1], r, 0, 2*Math.PI);
     s.ctx.stroke();
+  });
+}
+function filledCircleAt(s, pos, radius) {
+  var xys = toPixelPoses(s, pos);
+  var r = toPixelLength(s, radius);
+  xys.forEach(function(xy) {
+    s.ctx.beginPath();
+    s.ctx.arc(xy[0], xy[1], r, 0, 2*Math.PI);
+    s.ctx.fill();
   });
 }
 
