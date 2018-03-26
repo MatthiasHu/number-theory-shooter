@@ -102,7 +102,7 @@ function tick(g, input) {
     }
     var d = normalizePos(diffPos(g.me.pos, tar.pos));
     var dl = lengthPos(d);
-    if (dl < 0.4) {
+    if (dl < 0.4 && dl > tar.radius+g.me.radius) {
       tar.v = addPos(tar.v, scalePos(d, -0.00001/dl/dl/dl));
     }
     tar.pos = addPos(tar.pos, tar.v);
@@ -171,6 +171,8 @@ function tick(g, input) {
       else {
         g.me.lives -= 1;
         g.deathIndicator.intensity = 1;
+        var v = normalizePos(diffPos(g.me.pos, tar.pos));
+        g.me.v = addPos(g.me.v, scalePos(v, -0.02/lengthPos(v)));
         explodeTarget(g, tar, tar.primeFactors.length);
       }
     }
@@ -414,8 +416,10 @@ function hueColorTest(s, n) {
 }
 
 function drawBackground(s, g) {
-  var bg = 1 + g.deathIndicator.phase * g.deathIndicator.intensity;
-  s.ctx.fillStyle = toRGBAString(grey(0.15*bg));
+  var high = 1.0, middle = 0.15, low = 0;
+  var i = g.deathIndicator.intensity;
+  var bg = (1-i)*middle + i*(g.deathIndicator.phase>0 ? high : low);
+  s.ctx.fillStyle = toRGBAString(grey(bg));
   s.ctx.fillRect(0, 0, s.dim, s.dim);
 
   s.ctx.strokeStyle = toRGBAString(grey(0.3));
