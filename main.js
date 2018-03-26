@@ -16,7 +16,34 @@ function onLoad() {
   ctx.textBaseline = "middle";
   ctx.textAlign = "center";
 
-  var game =
+  var game = startGame();
+
+  var input =
+    { keysDown: {}
+    , keyCodes:
+      { up: 87       // 87 is W
+      , down: 83     // 83 is S
+      , left: 65     // 65 is A
+      , right: 68    // 68 is D
+      , restart: 13  // 13 is Enter
+      }
+    , clicks: []
+    };
+
+  var state = {game: game, surface: surface, input: input};
+
+  document.addEventListener("keydown",
+    function(e) {onKeyDown(state, e);} );
+  document.addEventListener("keyup",
+    function(e) {onKeyUp(state, e);} );
+  canvas.addEventListener("mousedown",
+    function(e) {onMouseDown(state, e);} );
+
+  timer(state);
+}
+
+function startGame() {
+  return (
     { targets: []
     , newTargets: []
     , spawningTargets: []
@@ -33,50 +60,44 @@ function onLoad() {
     , newBullets: []
     , fadingAmmos: []
     , newFadingAmmos: []
-    };
-
-  var input =
-    { keysDown: {}
-    , keyCodes:
-      { up: 87     // 87 is W
-      , down: 83   // 83 is S
-      , left: 65   // 65 is A
-      , right: 68  // 68 is D
-      }
-    , clicks: []
-    };
-
-  document.addEventListener("keydown",
-    function(e) {onKeyDown(input, e);} );
-  document.addEventListener("keyup",
-    function(e) {onKeyUp(input, e);} );
-  canvas.addEventListener("mousedown",
-    function(e) {onMouseDown(game, surface, input, e);} );
-
-  timer(game, surface, input);
+    , gameOver: false
+    , gameOverAge: 0
+    } );
 }
 
-function onKeyDown(input, e) {
-  input.keysDown[e.keyCode] = true;
+function onKeyDown(state, e) {
+  state.input.keysDown[e.keyCode] = true;
 }
-function onKeyUp(input, e) {
-  input.keysDown[e.keyCode] = false; }
-function onMouseDown(g, s, input, e) {
+function onKeyUp(state, e) {
+  state.input.keysDown[e.keyCode] = false;
+}
+function onMouseDown(state, e) {
+  var g = state.game;
+  var s = state.surface;
   if (e.button==0) {
     // save click position relative to me.pos
     var p = fromPixelPos(s, [e.offsetX, e.offsetY]);
     p = normalizePos(diffPos(s.center, p));
     var mp = normalizePos(diffPos(s.center, g.me.pos));
-    input.clicks.push(diffPos(mp, p));
+    state.input.clicks.push(diffPos(mp, p));
   }
 }
 
-function timer(game, surface, input) {
-  tick(game, input);
-  surface.center = lerp(surface.center, game.me.pos, 0.1);
-  draw(surface, game);
+function timer(state) {
+  var g = state.game;
+  var s = state.surface;
+  var input = state.input;
 
-  setTimeout(function() {timer(game, surface, input);}, 30);
+  if (g.gameOver==true && input.keysDown[input.keyCodes.restart]) {
+    state.game = startGame();
+    g = state.game;
+  }
+
+  tick(g, input);
+  s.center = lerp(s.center, g.me.pos, 0.1);
+  draw(s, g);
+
+  setTimeout(function() {timer(state);}, 30);
 }
 
 function tick(g, input) {
@@ -170,6 +191,9 @@ function tick(g, input) {
       }
       else {
         g.me.lives -= 1;
+        if (g.me.lives <= 0) {
+          g.gameOver = true;
+        }
         g.deathIndicator.intensity = 1;
         var v = normalizePos(diffPos(g.me.pos, tar.pos));
         g.me.v = addPos(g.me.v, scalePos(v, -0.02/lengthPos(v)));
@@ -189,7 +213,12 @@ function tick(g, input) {
     }
   });
 
-  g.spawning.phase += 0.01;
+  if (g.gameOver==true) {
+    g.gameOverAge += 1;
+  }
+  else {
+    g.spawning.phase += 0.01;
+  }
   if (g.spawning.phase >= 1) {
     g.spawning.phase -= 1;
     newSpawningTarget(g, g.spawning.nextValue, randomPos());
@@ -426,6 +455,16 @@ function drawBackground(s, g) {
   lineAt(s, {x: 0, y:0}, {x:  0.5, y:  0.5});
   lineAt(s, {x: 0, y:0}, {x:  0.5, y: -0.5});
   lineAt(s, {x: 0, y:0}, {x: -0.5, y:  0.5});
+
+  if (g.gameOver==true) {
+    var a1 = Math.max(0, Math.min(1, g.gameOverAge/100));
+    var a2 = Math.max(0, Math.min(1, (g.gameOverAge-200)/100));
+    s.ctx.fillStyle = toRGBAString([0.4, 0, 0, a1]);
+    textAt(s, {x: -0.3, y: -0.3}, "Game Over", 3, -2*Math.PI/8);
+    s.ctx.fillStyle = toRGBAString([0.4, 0, 0, a2]);
+    textAt(s, {x: -0.2, y: -0.2},
+      "press Enter to restart", 0.5, -2*Math.PI/8);
+  }
 }
 function drawTarget(s, tar) {
   if (tar.isPrime) {
