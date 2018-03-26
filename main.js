@@ -58,6 +58,8 @@ function startGame() {
     , deathIndicator: {phase: -1, intensity: 0}
     , bullets: []
     , newBullets: []
+    , bonuses: []
+    , newBonuses: []
     , fadingAmmos: []
     , newFadingAmmos: []
     , gameOver: false
@@ -104,6 +106,7 @@ function tick(g, input) {
   var tars = g.targets;
   var stars = g.spawningTargets;
   var bulls = g.bullets;
+  var bons = g.bonuses;
   var fammos = g.fadingAmmos;
 
   g.me.v = addPos(g.me.v, scalePos(inputMovement(input), 0.01));
@@ -132,9 +135,7 @@ function tick(g, input) {
 
   stars.forEach(function(star) {
     star.flashPhase += 0.13;
-    while (star.flashPhase >= 1) {
-      star.flashPhase -= 1;
-    }
+    star.flashPhase -= Math.floor(star.flashPhase);
     star.age += 1;
     if (star.age >= 30) {
       star.delete = true;
@@ -148,6 +149,11 @@ function tick(g, input) {
     if (bull.age >= 100) {
       bull.delete = true;
     }
+  });
+
+  bons.forEach(function(bon) {
+    bon.colorPhase += 0.002;
+    bon.colorPhase -= Math.floor(bon.colorPhase);
   });
 
   fammos.forEach(function(fammo) {
@@ -213,6 +219,14 @@ function tick(g, input) {
     }
   });
 
+  // bonus-me collisions
+  bons.forEach(function(bon) {
+    if (colliding(bon, g.me)) {
+      bon.delete = true;
+      if (g.me.lives < 3) {g.me.lives += 1;}
+    }
+  });
+
   if (g.gameOver==true) {
     g.gameOverAge += 1;
   }
@@ -228,12 +242,15 @@ function tick(g, input) {
   purgeList(tars);
   purgeList(stars);
   purgeList(bulls);
+  purgeList(bons);
   purgeList(fammos);
 
   g.targets = tars.concat(g.newTargets);
   g.newTargets = [];
   g.bullets = bulls.concat(g.newBullets);
   g.newBullets = [];
+  g.bonuses = bons.concat(g.newBonuses);
+  g.newBonuses = [];
   g.fadingAmmos = fammos.concat(g.newFadingAmmos);
   g.newFadingAmmos = [];
 }
@@ -282,6 +299,14 @@ function newBullet(g, value, pos, v) {
     , age: 0
     , angle: Math.atan2(v.y, v.x) } );
 }
+function newBonus(g, pos) {
+  g.newBonuses.push(
+    { pos: pos
+    , v: {x:0, y:0}
+    , radius: 0.01
+    , colorPhase: 0
+    } );
+}
 function newFadingAmmo(g, value, pos) {
   g.newFadingAmmos.push(
     { value: value
@@ -324,7 +349,16 @@ function explodeTarget(g, tar, k) {
 function mergeTargets(g, tar1, tar2) {
   tar1.delete = true;
   tar2.delete = true;
-  newTarget(g, tar1.value+tar2.value, lerp(tar1.pos, tar2.pos, 0.5), lerp(tar1.v, tar2.v, 0.5));
+  var pos = lerp(tar1.pos, tar2.pos, 0.5);
+  if (    tar1.isPrime==true
+       && tar2.isPrime==true
+       && Math.abs(tar2.value-tar1.value)==2
+     ) {
+    newBonus(g, pos);
+  }
+  else {
+    newTarget(g, tar1.value+tar2.value, pos, lerp(tar1.v, tar2.v, 0.5));
+  }
 }
 
 function dropAmmo(g) {
@@ -413,6 +447,10 @@ function primeFactors(n) {
 function draw(s, g) {
   drawBackground(s, g);
 
+  g.bonuses.forEach(function(bon) {
+    drawBonus(s, bon);
+  });
+
   g.targets.forEach(function(tar) {
     drawTarget(s, tar);
   });
@@ -465,6 +503,13 @@ function drawBackground(s, g) {
     textAt(s, {x: -0.2, y: -0.2},
       "press Enter to restart", 0.5, -2*Math.PI/8);
   }
+}
+function drawBonus(s, bon) {
+  var color = colorFromHue(bon.colorPhase);
+  spotlightAt(s, bon.pos, 0.1, withAlpha(color, 0.2));
+  spotlightAt(s, bon.pos, 0.04, withAlpha(black, 0.6));
+  s.ctx.fillStyle = toRGBAString([1, 0, 0, 1]);
+  filledCircleAt(s, bon.pos, 0.01);
 }
 function drawTarget(s, tar) {
   if (tar.isPrime) {
@@ -522,7 +567,7 @@ function drawMe(s, me) {
   }
 }
 function drawLives(s, n) {
-  s.ctx.fillStyle = "red";
+  s.ctx.fillStyle = toRGBAString([1, 0, 0, 1]);
   for (var i=0; i<n; i++) {
     s.ctx.beginPath();
     s.ctx.arc((0.03*(i+1))*s.dim, 0.03*s.dim, 0.01*s.dim, 0, 2*Math.PI);
