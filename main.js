@@ -684,5 +684,8 @@ function withAlpha(c, alpha) {
 }
 
 function toRGBAString(color) {
-  return ("rgba("+color.map(function (c) { return Math.trunc(c*255) }).join(", ") + ")");
+  var rgb = color.slice(0, 3).map(
+    function(c) {return Math.trunc(c*255);} ).join(", ");
+  var a = color[3];
+  return ("rgba("+rgb+", "+a+")");
 }
