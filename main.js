@@ -520,12 +520,18 @@ function drawTarget(s, tar) {
     textAt(s, tar.pos, tar.value);
   }
   else {
+    var n = tar.primeFactors.length;
     var i = Math.floor(tar.flashPhase);
     var t = tar.flashPhase - i;
     var lightRadius = 0.07 + 0.03*Math.sin(t*Math.PI);
     var color = primeColor(tar.primeFactors[i]);
 
     spotlightAt(s, tar.pos, lightRadius, color);
+
+    for (var i=0; i<n; i++) {
+      var v = scalePos(circlePos(i/n*2*Math.PI), 0.04);
+      spotlightAt(s, addPos(tar.pos, v), 0.02, withAlpha(black, 0.2));
+    }
 
     s.ctx.fillStyle = toRGBAString(white);
     textAt(s, tar.pos, tar.value);
