@@ -258,10 +258,15 @@ function tick(g, input) {
 function inputMovement(input) {
   var k = input.keysDown;
   var c = input.keyCodes;
-  return (
+  var v = (
     { x: (k[c.left]==true ? -1 : 0) + (k[c.right]==true ? 1 : 0)
     , y: (k[c.up  ]==true ? -1 : 0) + (k[c.down ]==true ? 1 : 0)
     } );
+  var l = lengthPos(v);
+  if (l > 1) {
+    v = scalePos(v, 1/l);
+  }
+  return v;
 }
 
 function shoot(g, v) {
