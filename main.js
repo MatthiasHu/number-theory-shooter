@@ -3,18 +3,15 @@
 function onLoad() {
   var canvas = document.getElementById("game-canvas")
   var ctx = canvas.getContext("2d");
-  var dim = 800;
+
   var surface =
     { canvas: canvas
     , ctx: ctx
-    , dim: dim
+    , dim: 0
     , center: {x: 0, y: 0}
     };
-  canvas.width = dim;
-  canvas.height = dim;
-  ctx.font = (dim*0.06)+"px DUMMY";
-  ctx.textBaseline = "middle";
-  ctx.textAlign = "center";
+
+  adjustSize(surface);
 
   var game = startGame();
 
@@ -43,8 +40,20 @@ function onLoad() {
     function(e) {onMouseDown(state, e);} );
   window.addEventListener("devicemotion",
     function(e) {onDeviceMotion(state, e);} );
+  window.addEventListener("resize",
+    function(e) {adjustSize(state.surface);} );
 
   timer(state);
+}
+
+function adjustSize(surface) {
+  var dim = Math.min(window.innerWidth, window.innerHeight)*0.95;
+  surface.dim = dim;
+  surface.canvas.width = dim;
+  surface.canvas.height = dim;
+  surface.ctx.font = (surface.dim*0.06)+"px DUMMY";
+  surface.ctx.textBaseline = "middle";
+  surface.ctx.textAlign = "center";
 }
 
 function startGame() {
