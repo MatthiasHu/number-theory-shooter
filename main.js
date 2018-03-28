@@ -565,11 +565,18 @@ function drawBackground(s, g) {
   if (g.gameOver==true) {
     var a1 = Math.max(0, Math.min(1, g.gameOverAge/100));
     var a2 = Math.max(0, Math.min(1, (g.gameOverAge-100)/100));
+    function slopingText(x, y, text, scale) {
+      textAt(s, {x: x-y, y: -x-y}, text, scale, -2*Math.PI/8);
+    }
     s.ctx.fillStyle = toRGBAString([0.4, 0, 0, a1]);
-    textAt(s, {x: -0.3, y: -0.3}, "Game Over", 3, -2*Math.PI/8);
+    slopingText(0, 0.35, "Game Over", 3);
+    s.ctx.fillStyle = toRGBAString([0.4, 0.4, 0.4, a1]);
+    slopingText(-0.35, 0.05, "last spawned", 0.75);
+    slopingText(-0.35, 0.15 , g.spawning.nextValue-1, 3);
+    slopingText( 0.35, 0.05, "max gems", 0.75);
+    slopingText( 0.35, 0.15 , g.me.collectedGems.max, 3);
     s.ctx.fillStyle = toRGBAString([0.4, 0, 0, a2]);
-    textAt(s, {x: -0.2, y: -0.2},
-      restartInstruction(g), 0.5, -2*Math.PI/8);
+    slopingText(0, 0.25, restartInstruction(g), 0.5);
   }
 }
 function restartInstruction(g) {
