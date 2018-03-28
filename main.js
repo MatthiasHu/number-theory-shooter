@@ -28,6 +28,9 @@ function onLoad() {
       , restart: 13  // 13 is Enter
       }
     , clicks: []
+    , gettingDeviceMotionEvents: false
+    , haveRecentAcceleration: false
+    , acceleration: {x:0, y:0, z:0}
     };
 
   var state = {game: game, surface: surface, input: input};
@@ -38,6 +41,8 @@ function onLoad() {
     function(e) {onKeyUp(state, e);} );
   canvas.addEventListener("mousedown",
     function(e) {onMouseDown(state, e);} );
+  window.addEventListener("devicemotion",
+    function(e) {onDeviceMotion(state, e);} );
 
   timer(state);
 }
@@ -84,6 +89,21 @@ function onMouseDown(state, e) {
     state.input.clicks.push(diffPos(mp, p));
   }
 }
+function onDeviceMotion(state, e) {
+  if (state.input.haveRecentAcceleration==true) return;
+  state.input.haveRecentAcceleration = true;
+  state.input.gettingDeviceMotionEvents = true;
+
+  var acc = e.accelerationIncludingGravity;
+  acc = {x: acc.x, y: acc.y, z: acc.z};
+  if (screen.orientation) {
+    var a = 2*Math.PI/360 * screen.orientation.angle;
+    acc = { x: Math.cos(a)*acc.x - Math.sin(a)*acc.y
+          , y: Math.sin(a)*acc.x + Math.cos(a)*acc.y
+          , z: acc.z};
+  }
+  state.input.acceleration = acc;
+}
 
 function timer(state) {
   var g = state.game;
@@ -98,6 +118,8 @@ function timer(state) {
   tick(g, input);
   s.center = lerp(s.center, g.me.pos, 0.1);
   draw(s, g);
+
+  input.haveRecentAcceleration = false;
 
   setTimeout(function() {timer(state);}, 30);
 }
@@ -256,12 +278,23 @@ function tick(g, input) {
 }
 
 function inputMovement(input) {
-  var k = input.keysDown;
-  var c = input.keyCodes;
-  var v = (
-    { x: (k[c.left]==true ? -1 : 0) + (k[c.right]==true ? 1 : 0)
-    , y: (k[c.up  ]==true ? -1 : 0) + (k[c.down ]==true ? 1 : 0)
-    } );
+  var v = {x: 0, y: 0};
+  if (input.gettingDeviceMotionEvents) {
+    var acc = input.acceleration;
+    var mag = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
+    mag = mag < 0.001 ? 1 : mag;
+    acc = {x: acc.x/mag, y: acc.y/mag, z: acc.z/mag};
+    var x = -acc.x;
+    var y = -(acc.z - acc.y)/Math.sqrt(2);
+    v = {x: x*8, y: y*8};
+  }
+  else {
+    var k = input.keysDown;
+    var c = input.keyCodes;
+    v = ( { x: (k[c.left]==true ? -1 : 0) + (k[c.right]==true ? 1 : 0)
+          , y: (k[c.up  ]==true ? -1 : 0) + (k[c.down ]==true ? 1 : 0)
+          } );
+  }
   var l = lengthPos(v);
   if (l > 1) {
     v = scalePos(v, 1/l);
