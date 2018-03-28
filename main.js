@@ -78,6 +78,7 @@ function startGame() {
     , newFadingAmmos: []
     , gameOver: false
     , gameOverAge: 0
+    , assumeMobile: false
     } );
 }
 
@@ -119,7 +120,14 @@ function timer(state) {
   var s = state.surface;
   var input = state.input;
 
-  if (g.gameOver==true && input.keysDown[input.keyCodes.restart]) {
+  g.assumeMobile = input.gettingDeviceMotionEvents;
+
+  if ( g.gameOver==true
+       && (    input.keysDown[input.keyCodes.restart]
+            || (    g.assumeMobile
+                 && input.clicks.length > 0
+                 && g.gameOverAge > 100 ) )
+     ) {
     state.game = startGame();
     g = state.game;
   }
@@ -543,13 +551,18 @@ function drawBackground(s, g) {
 
   if (g.gameOver==true) {
     var a1 = Math.max(0, Math.min(1, g.gameOverAge/100));
-    var a2 = Math.max(0, Math.min(1, (g.gameOverAge-200)/100));
+    var a2 = Math.max(0, Math.min(1, (g.gameOverAge-100)/100));
     s.ctx.fillStyle = toRGBAString([0.4, 0, 0, a1]);
     textAt(s, {x: -0.3, y: -0.3}, "Game Over", 3, -2*Math.PI/8);
     s.ctx.fillStyle = toRGBAString([0.4, 0, 0, a2]);
     textAt(s, {x: -0.2, y: -0.2},
-      "press Enter to restart", 0.5, -2*Math.PI/8);
+      restartInstruction(g), 0.5, -2*Math.PI/8);
   }
+}
+function restartInstruction(g) {
+  return ( g.assumeMobile==true
+    ? "tap to restart"
+    : "press Enter to restart" );
 }
 function drawBonus(s, bon) {
   var color = colorFromHue(bon.colorPhase);
