@@ -68,6 +68,7 @@ function startGame() {
       , radius: 0.04
       , lives: 3
       , ammo: []
+      , collectedGems: {current: 0, max: 0, colorPhase: 0}
       }
     , deathIndicator: {phase: -1, intensity: 0}
     , bullets: []
@@ -158,6 +159,8 @@ function tick(g, input) {
   g.deathIndicator.intensity *= 0.8;
   g.deathIndicator.phase *= -1;
 
+  g.me.collectedGems.colorPhase += 0.02;
+
   tars.forEach(function(tar) {
     tar.flashPhase += 0.1232;
     while (tar.flashPhase >= tar.primeFactors.length) {
@@ -237,6 +240,7 @@ function tick(g, input) {
       else {
         g.me.lives -= 1;
         if (g.me.lives <= 0) {
+          g.me.lives = 0;
           g.gameOver = true;
         }
         g.deathIndicator.intensity = 1;
@@ -262,7 +266,15 @@ function tick(g, input) {
   bons.forEach(function(bon) {
     if (colliding(bon, g.me)) {
       bon.delete = true;
-      if (g.me.lives < 3) {g.me.lives += 1;}
+      if (g.me.lives < 3) {
+        g.me.lives += 1;
+      }
+      else {
+        g.me.collectedGems.current += 1;
+        if (g.me.collectedGems.current > g.me.collectedGems.max) {
+          g.me.collectedGems.max = g.me.collectedGems.current;
+        }
+      }
     }
   });
 
@@ -503,7 +515,7 @@ function draw(s, g) {
   drawBackground(s, g);
 
   g.bonuses.forEach(function(bon) {
-    drawBonus(s, bon);
+    drawBonus(s, bon, g.me.lives >= 3);
   });
 
   g.targets.forEach(function(tar) {
@@ -525,6 +537,7 @@ function draw(s, g) {
   });
 
   drawLives(s, g.me.lives);
+  drawCollectedGems(s, g.me.collectedGems);
 
   // hueColorTest(s, 100);
 }
@@ -564,12 +577,17 @@ function restartInstruction(g) {
     ? "tap to restart"
     : "press Enter to restart" );
 }
-function drawBonus(s, bon) {
+function drawBonus(s, bon, asGem) {
   var color = colorFromHue(bon.colorPhase);
   spotlightAt(s, bon.pos, 0.1, withAlpha(color, 0.2));
   spotlightAt(s, bon.pos, 0.04, withAlpha(black, 0.6));
-  s.ctx.fillStyle = toRGBAString([1, 0, 0, 1]);
-  filledCircleAt(s, bon.pos, 0.01);
+  if (asGem) {
+    gemAt(s, bon.pos, bon.colorPhase+0.5);
+  }
+  else {
+    s.ctx.fillStyle = toRGBAString([1, 0, 0, 1]);
+    filledCircleAt(s, bon.pos, 0.01);
+  }
 }
 function drawTarget(s, tar) {
   if (tar.isPrime) {
@@ -636,8 +654,25 @@ function drawLives(s, n) {
   s.ctx.fillStyle = toRGBAString([1, 0, 0, 1]);
   for (var i=0; i<n; i++) {
     s.ctx.beginPath();
-    s.ctx.arc((0.03*(i+1))*s.dim, 0.03*s.dim, 0.01*s.dim, 0, 2*Math.PI);
+    s.ctx.arc((i+1)*0.03*s.dim, 0.03*s.dim, 0.01*s.dim, 0, 2*Math.PI);
     s.ctx.fill();
+  }
+}
+function drawCollectedGems(s, collectedGems) {
+  var n = collectedGems.current;
+  var m = collectedGems.max;
+
+  for (var i=0; i<m; i++) {
+    var x = Math.floor(i/20);
+    var xx = Math.floor(x/5);
+    var y = i-x*20;
+    var yy = Math.floor(y/5);
+
+    s.ctx.save();
+    s.ctx.translate( (0.03 + x*0.03 + xx*0.015)*s.dim
+                   , (0.5-20.5*0.015 + y*0.03 + yy*0.015)*s.dim );
+    gemHere(s, collectedGems.colorPhase - i*0.11, i<n);
+    s.ctx.restore();
   }
 }
 
@@ -693,6 +728,31 @@ function filledCircleAt(s, pos, radius) {
     s.ctx.fill();
   });
 }
+function gemAt(s, pos, phase, filled=true) {
+  toPixelPoses(s, pos).forEach(function(xy) {
+    s.ctx.save();
+    s.ctx.translate(xy[0], xy[1]);
+    gemHere(s, phase, filled);
+    s.ctx.restore();
+  });
+}
+function gemHere(s, phase, filled=true) {
+  var r = toPixelLength(s, 0.01);
+  var grad = s.ctx.createRadialGradient(0, 0, 0, 0, 0, r);
+  grad.addColorStop(0, toRGBAString(colorFromHue(phase+0.1)));
+  grad.addColorStop(1, toRGBAString(colorFromHue(phase    )));
+
+  s.ctx.beginPath();
+  s.ctx.arc(0, 0, r, 0, 2*Math.PI);
+  if (filled) {
+    s.ctx.fillStyle = grad;
+    s.ctx.fill();
+  }
+  else {
+    s.ctx.strokeStyle = grad;
+    s.ctx.stroke();
+  }
+}
 
 function toPixelPoses(s, pos) {
   var nps = normalizedPoses(diffPos(s.center, pos));
@@ -709,7 +769,6 @@ function fromPixelPos(s, xy) {
 
 function primeColor(p) {
   var hue = p*goldenRatio;
-  hue = hue - Math.floor(hue);
   return colorFromHue(hue);
 }
 
@@ -717,6 +776,9 @@ var goldenRatio = (1 + Math.sqrt(5)) / 2
 
 // 0 <= hue < 1
 function colorFromHue(hue) {
+  while (hue < 0 || hue >= 1) {
+    hue = hue-Math.floor(hue);
+  }
   var cs =
     [ [1, 0, 0, 1]
     , [1, 1, 0, 1]
