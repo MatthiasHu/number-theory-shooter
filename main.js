@@ -341,10 +341,14 @@ function shoot(g, v) {
 
 function newTarget(g, value, pos, v={x:0, y:0}) {
   var primes = primeFactors(value);
+  var prime = isPrime(value);
+  var twins = [-2, 2].map(function(d) {
+    return prime && isPrime(value+d); });
   g.newTargets.push(
     { value: value
     , primeFactors: primes
-    , isPrime: primes.length==1
+    , isPrime: prime
+    , twins: twins
     , pos: pos
     , v: {x:v.x, y:v.y}
     , radius: 0.06
@@ -510,6 +514,9 @@ function primeFactors(n) {
   }
   return ps;
 }
+function isPrime(n) {
+  return primeFactors(n).length == 1;
+}
 
 function draw(s, g) {
   drawBackground(s, g);
@@ -603,6 +610,17 @@ function drawTarget(s, tar) {
 
     s.ctx.fillStyle = toRGBAString(mixColors(color, white, 0.2));
     textAt(s, tar.pos, tar.value);
+
+    tar.twins.forEach(function(isTwin, index) {
+      if (isTwin) {
+        var d = index*2 - 1;
+        var value = tar.value + 2*d;
+        var color = mixColors(primeColor(value), white, 0.5);
+        var pos = addPos(tar.pos, {x: 0, y: -d*0.04});
+        s.ctx.fillStyle = toRGBAString(withAlpha(color, 0.3));
+        textAt(s, pos, value, 0.4);
+      }
+    });
   }
   else {
     var n = tar.primeFactors.length;
