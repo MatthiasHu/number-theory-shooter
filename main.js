@@ -60,6 +60,7 @@ function startGame() {
   return (
     { targets: []
     , newTargets: []
+    , twinConnections: []
     , spawningTargets: []
     , spawning: {phase: 0, nextValue: 2}
     , me:
@@ -160,6 +161,28 @@ function tick(g, input) {
   g.deathIndicator.phase *= -1;
 
   g.me.collectedGems.colorPhase += 0.02;
+
+  var twinConnections = [];
+  tars.forEach(function(tar) {
+    if (tar.isPrime==true && tar.twins[1]==true) {
+      tars.forEach(function(twin) {
+        if (twin.value == tar.value + 2) {
+          twinConnections.push([tar, twin]);
+        }
+      });
+    }
+  });
+  g.twinConnections = twinConnections;
+
+  twinConnections.forEach(function(conn) {
+    var d = normalizePos(diffPos(conn[0].pos, conn[1].pos));
+    var dl = lengthPos(d);
+    if (dl < 0.4 && dl > conn[0].radius + conn[1].radius) {
+      var dv = scalePos(d, -0.00001/dl/dl/dl);
+      conn[0].v = addPos(conn[0].v, scalePos(dv, -1));
+      conn[1].v = addPos(conn[1].v, dv);
+    }
+  });
 
   tars.forEach(function(tar) {
     tar.flashPhase += 0.1232;
@@ -529,6 +552,10 @@ function draw(s, g) {
     drawTarget(s, tar);
   });
 
+  g.twinConnections.forEach(function(conn) {
+    drawTwinConnection(s, conn);
+  });
+
   g.spawningTargets.forEach(function(star) {
     drawSpawningTarget(s, star);
   });
@@ -638,6 +665,21 @@ function drawTarget(s, tar) {
 
     s.ctx.fillStyle = toRGBAString(white);
     textAt(s, tar.pos, tar.value);
+  }
+}
+function drawTwinConnection(s, conn) {
+  var d = lengthPos(normalizePos(diffPos(conn[0].pos, conn[1].pos)));
+  var pos = lerp(conn[0].pos, conn[1].pos, 0.5);
+  var t = d/0.4;
+  var n = 10;
+  for (var i=0; i<=n; i++) {
+    if (i/n > t) {
+      var r = Math.exp(-5*Math.pow((i/n - t), 0.5));
+      var color = primeColor(conn[i%2].value);
+      var alpha = Math.pow(i/n - t, 0.5) * Math.pow(1-t, 0.25);
+      s.ctx.strokeStyle = toRGBAString(withAlpha(color, alpha));
+      circleAt(s, pos, r*0.5);
+    }
   }
 }
 function drawSpawningTarget(s, star) {
