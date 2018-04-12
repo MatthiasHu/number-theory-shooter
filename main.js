@@ -58,10 +58,9 @@ function adjustSize(surface) {
 
 function startGame() {
   return (
-    { targets: []
-    , newTargets: []
+    { targets: {current: [], issued: []}
     , twinConnections: []
-    , spawningTargets: []
+    , spawningTargets: {current: [], issued: []}
     , spawning: {phase: 0, nextValue: 2}
     , me:
       { pos: {x: Math.random(), y: Math.random()}
@@ -71,13 +70,16 @@ function startGame() {
       , ammo: []
       , collectedGems: {current: 0, max: 0, colorPhase: 0}
       }
-    , deathIndicator: {phase: -1, intensity: 0}
-    , bullets: []
-    , newBullets: []
-    , bonuses: []
-    , newBonuses: []
-    , fadingAmmos: []
-    , newFadingAmmos: []
+    , deathIndicator:
+      { phase: -1
+      , hue: 0
+      , blackWhiteIntensity: 0
+      , colorIntensity: 0
+      }
+    , bullets: {current: [], issued: []}
+    , bonuses: {current: [], issued: []}
+    , antiBullets: {current: [], issued: []}
+    , fadingAmmos: {current: [], issued: []}
     , gameOver: false
     , gameOverAge: 0
     , assumeMobile: false
@@ -144,11 +146,12 @@ function timer(state) {
 }
 
 function tick(g, input) {
-  var tars = g.targets;
-  var stars = g.spawningTargets;
-  var bulls = g.bullets;
-  var bons = g.bonuses;
-  var fammos = g.fadingAmmos;
+  var tars = g.targets.current;
+  var stars = g.spawningTargets.current;
+  var bulls = g.bullets.current;
+  var bons = g.bonuses.current;
+  var abulls = g.antiBullets.current;
+  var fammos = g.fadingAmmos.current;
 
   g.me.v = addPos(g.me.v, scalePos(inputMovement(input), 0.01));
   g.me.v = scalePos(g.me.v, 0.7);
@@ -157,8 +160,11 @@ function tick(g, input) {
   input.clicks.forEach(function(v) {shoot(g, v);});
   input.clicks = [];
 
-  g.deathIndicator.intensity *= 0.8;
+  g.deathIndicator.blackWhiteIntensity *= 0.8;
+  g.deathIndicator.colorIntensity *= 0.8;
   g.deathIndicator.phase *= -1;
+  g.deathIndicator.hue += 0.13;
+  g.deathIndicator.hue %= 1;
 
   g.me.collectedGems.colorPhase += 0.02;
 
@@ -185,15 +191,26 @@ function tick(g, input) {
   });
 
   tars.forEach(function(tar) {
+    // flashing
     tar.flashPhase += 0.1232;
     while (tar.flashPhase >= tar.primeFactors.length) {
       tar.flashPhase -= tar.primeFactors.length;
     }
+    // charging
+    if (tar.isPrime!=true) {
+      tar.chargingPhase += tar.value / (33*10000);
+      while (tar.chargingPhase >= 1) {
+        tar.chargingPhase -= 1;
+        targetFires(g, tar);
+      }
+    }
+    // gavitating towards me
     var d = normalizePos(diffPos(g.me.pos, tar.pos));
     var dl = lengthPos(d);
     if (dl < 0.4 && dl > tar.radius+g.me.radius) {
       tar.v = addPos(tar.v, scalePos(d, -0.00001/dl/dl/dl));
     }
+    // movement
     tar.pos = addPos(tar.pos, tar.v);
     tar.v = scalePos(tar.v, 0.98);
   });
@@ -219,6 +236,14 @@ function tick(g, input) {
   bons.forEach(function(bon) {
     bon.colorPhase += 0.002;
     bon.colorPhase -= Math.floor(bon.colorPhase);
+  });
+
+  abulls.forEach(function(abull) {
+    abull.pos = addPos(abull.pos, abull.v);
+    abull.age += 1;
+    if (abull.age >= 20) {
+      abull.delete = true;
+    }
   });
 
   fammos.forEach(function(fammo) {
@@ -266,7 +291,7 @@ function tick(g, input) {
           g.me.lives = 0;
           g.gameOver = true;
         }
-        g.deathIndicator.intensity = 1;
+        g.deathIndicator.blackWhiteIntensity = 1;
         var v = normalizePos(diffPos(g.me.pos, tar.pos));
         g.me.v = addPos(g.me.v, scalePos(v, -0.02/lengthPos(v)));
         explodeTarget(g, tar, tar.primeFactors.length);
@@ -285,6 +310,15 @@ function tick(g, input) {
     }
   });
 
+  // antiBullet-me collisions
+  abulls.forEach(function(abull) {
+    if (colliding(abull, g.me)) {
+      abull.delete = true;
+      loseGem(g);
+      g.me.v = addPos(g.me.v, abull.v);
+    }
+  });
+
   // bonus-me collisions
   bons.forEach(function(bon) {
     if (colliding(bon, g.me)) {
@@ -293,10 +327,7 @@ function tick(g, input) {
         g.me.lives += 1;
       }
       else {
-        g.me.collectedGems.current += 1;
-        if (g.me.collectedGems.current > g.me.collectedGems.max) {
-          g.me.collectedGems.max = g.me.collectedGems.current;
-        }
+        collectGem(g);
       }
     }
   });
@@ -313,20 +344,13 @@ function tick(g, input) {
     g.spawning.nextValue += 1;
   }
 
-  purgeList(tars);
-  purgeList(stars);
-  purgeList(bulls);
-  purgeList(bons);
-  purgeList(fammos);
-
-  g.targets = tars.concat(g.newTargets);
-  g.newTargets = [];
-  g.bullets = bulls.concat(g.newBullets);
-  g.newBullets = [];
-  g.bonuses = bons.concat(g.newBonuses);
-  g.newBonuses = [];
-  g.fadingAmmos = fammos.concat(g.newFadingAmmos);
-  g.newFadingAmmos = [];
+  [ g.targets
+  , g.spawningTargets
+  , g.bullets
+  , g.bonuses
+  , g.antiBullets
+  , g.fadingAmmos
+  ].forEach(purgeExtendList);
 }
 
 function inputMovement(input) {
@@ -361,13 +385,37 @@ function shoot(g, v) {
     newBullet(g, g.me.ammo.pop(), g.me.pos, scalePos(v, 0.06));
   }
 }
+function collectGem(g) {
+  g.me.collectedGems.current += 1;
+  if (g.me.collectedGems.current > g.me.collectedGems.max) {
+    g.me.collectedGems.max = g.me.collectedGems.current;
+  }
+}
+function loseGem(g) {
+  if (g.me.collectedGems.current > 0) {
+    g.me.collectedGems.current -= 1;
+    g.deathIndicator.colorIntensity = 1;
+  }
+}
+function dropAmmo(g) {
+  if (g.me.ammo.length > 0) {
+    var value = g.me.ammo.pop();
+    newFadingAmmo(g, value, g.me.pos);
+  }
+}
 
-function newTarget(g, value, pos, v={x:0, y:0}) {
+function targetFires(g, tar) {
+  var d = normalizePos(diffPos(tar.pos, g.me.pos));
+  var dl = lengthPos(d);
+  newAntiBullet(g, tar.pos, scalePos(d, 0.04/dl));
+}
+
+function newTarget(g, value, pos, v={x:0, y:0}, chargingPhase=0) {
   var primes = primeFactors(value);
   var prime = isPrime(value);
   var twins = [-2, 2].map(function(d) {
     return prime && isPrime(value+d); });
-  g.newTargets.push(
+  g.targets.issued.push(
     { value: value
     , primeFactors: primes
     , isPrime: prime
@@ -375,17 +423,18 @@ function newTarget(g, value, pos, v={x:0, y:0}) {
     , pos: pos
     , v: {x:v.x, y:v.y}
     , radius: 0.06
+    , chargingPhase: prime==true ? 0 : chargingPhase
     , flashPhase: 0 } );
 }
 function newSpawningTarget(g, value, pos) {
-  g.spawningTargets.push(
+  g.spawningTargets.issued.push(
     { value: value
     , pos: pos
     , flashPhase: 0
     , age: 0 } );
 }
 function newBullet(g, value, pos, v) {
-  g.newBullets.push(
+  g.bullets.issued.push(
     { value: value
     , pos: pos
     , v: v
@@ -394,15 +443,22 @@ function newBullet(g, value, pos, v) {
     , angle: Math.atan2(v.y, v.x) } );
 }
 function newBonus(g, pos) {
-  g.newBonuses.push(
+  g.bonuses.issued.push(
     { pos: pos
     , v: {x:0, y:0}
     , radius: 0.01
     , colorPhase: 0
     } );
 }
+function newAntiBullet(g, pos, v) {
+  g.antiBullets.issued.push(
+    { pos: pos
+    , v: v
+    , radius: 0.015
+    , age: 0 } );
+}
 function newFadingAmmo(g, value, pos) {
-  g.newFadingAmmos.push(
+  g.fadingAmmos.issued.push(
     { value: value
     , pos: pos
     , v: scalePos(circlePos(Math.random()*2*Math.PI), 0.01)
@@ -437,7 +493,7 @@ function explodeTarget(g, tar, k) {
     return scalePos(circlePos(alpha + i/k*2*Math.PI), 0.015);
   }
   factors.forEach(function(value, i) {
-    newTarget(g, value, tar.pos, addPos(tar.v, vel(i)), 1);
+    newTarget(g, value, tar.pos, addPos(tar.v, vel(i)));
   });
 }
 function mergeTargets(g, tar1, tar2) {
@@ -451,14 +507,8 @@ function mergeTargets(g, tar1, tar2) {
     newBonus(g, pos);
   }
   else {
-    newTarget(g, tar1.value+tar2.value, pos, lerp(tar1.v, tar2.v, 0.5));
-  }
-}
-
-function dropAmmo(g) {
-  if (g.me.ammo.length > 0) {
-    var value = g.me.ammo.pop();
-    newFadingAmmo(g, value, g.me.pos);
+    newTarget(g, tar1.value+tar2.value, pos, lerp(tar1.v, tar2.v, 0.5),
+      Math.max(tar1.chargingPhase, tar2.chargingPhase));
   }
 }
 
@@ -516,13 +566,15 @@ function normalizedPoses(pos) {
     , {x: xx, y: yy} ] );
 }
 
-function purgeList(l) {
-  for (var i=0; i<l.length; i++) {
-    if (l[i].delete == true) {
-      l.splice(i, 1);
+function purgeExtendList(l) {
+  for (var i=0; i<l.current.length; i++) {
+    if (l.current[i].delete == true) {
+      l.current.splice(i, 1);
       i--;
     }
   }
+  l.current = l.current.concat(l.issued);
+  l.issued = [];
 }
 
 function primeFactors(n) {
@@ -544,11 +596,15 @@ function isPrime(n) {
 function draw(s, g) {
   drawBackground(s, g);
 
-  g.bonuses.forEach(function(bon) {
+  g.bonuses.current.forEach(function(bon) {
     drawBonus(s, bon, g.me.lives >= 3);
   });
 
-  g.targets.forEach(function(tar) {
+  g.antiBullets.current.forEach(function(abull) {
+    drawAntiBullet(s, abull);
+  });
+
+  g.targets.current.forEach(function(tar) {
     drawTarget(s, tar);
   });
 
@@ -556,17 +612,17 @@ function draw(s, g) {
     drawTwinConnection(s, conn);
   });
 
-  g.spawningTargets.forEach(function(star) {
+  g.spawningTargets.current.forEach(function(star) {
     drawSpawningTarget(s, star);
   });
 
-  g.bullets.forEach(function(bull) {
+  g.bullets.current.forEach(function(bull) {
     drawBullet(s, bull);
   });
 
   drawMe(s, g.me);
 
-  g.fadingAmmos.forEach(function(fammo) {
+  g.fadingAmmos.current.forEach(function(fammo) {
     drawFadingAmmo(s, fammo);
   });
 
@@ -585,10 +641,14 @@ function hueColorTest(s, n) {
 }
 
 function drawBackground(s, g) {
-  var high = 1.0, middle = 0.15, low = 0;
-  var i = g.deathIndicator.intensity;
-  var bg = (1-i)*middle + i*(g.deathIndicator.phase>0 ? high : low);
-  s.ctx.fillStyle = toRGBAString(grey(bg));
+  var ind = g.deathIndicator;
+  var blackWhite = ind.phase > 0 ? white : black;
+  var color = colorFromHue(ind.hue);
+  var i1 = ind.blackWhiteIntensity, i2 = ind.colorIntensity;
+  var bg = grey(0.15);
+  bg = mixColors(bg, color, i2);
+  bg = mixColors(bg, blackWhite, i1);
+  s.ctx.fillStyle = toRGBAString(bg);
   s.ctx.fillRect(0, 0, s.dim, s.dim);
 
   s.ctx.strokeStyle = toRGBAString(grey(0.3));
@@ -630,6 +690,10 @@ function drawBonus(s, bon, asGem) {
     filledCircleAt(s, bon.pos, 0.01);
   }
 }
+function drawAntiBullet(s, abull) {
+  s.ctx.fillStyle = toRGBAString(white);
+  filledCircleAt(s, abull.pos, 0.5*abull.radius);
+}
 function drawTarget(s, tar) {
   if (tar.isPrime) {
     var color = primeColor(tar.value);
@@ -665,6 +729,14 @@ function drawTarget(s, tar) {
 
     s.ctx.fillStyle = toRGBAString(white);
     textAt(s, tar.pos, tar.value);
+
+    var charge = tar.chargingPhase;
+    s.ctx.strokeStyle = toRGBAString(withAlpha(white, charge));
+    for (var i=0; i<4; i++) {
+      var a = i*Math.PI/2;
+      var b = charge * Math.PI/4;
+      arcAt(s, tar.pos, tar.radius, a-b, a+b);
+    }
   }
 }
 function drawTwinConnection(s, conn) {
@@ -777,14 +849,17 @@ function textAt(s, pos, text, scale=1, angle=0) {
     s.ctx.restore();
   });
 }
-function circleAt(s, pos, radius) {
+function arcAt(s, pos, radius, alpha, beta) {
   var xys = toPixelPoses(s, pos);
   var r = toPixelLength(s, radius);
   xys.forEach(function(xy) {
     s.ctx.beginPath();
-    s.ctx.arc(xy[0], xy[1], r, 0, 2*Math.PI);
+    s.ctx.arc(xy[0], xy[1], r, alpha, beta);
     s.ctx.stroke();
   });
+}
+function circleAt(s, pos, radius) {
+  arcAt(s, pos, radius, 0, 2*Math.PI);
 }
 function filledCircleAt(s, pos, radius) {
   var xys = toPixelPoses(s, pos);
