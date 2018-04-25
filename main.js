@@ -25,7 +25,7 @@ function onLoad() {
       , restart: 13  // 13 is Enter
       }
     , clicks: []
-    , gettingDeviceMotionEvents: false
+    , gettingKeyEvents: false
     , haveRecentAcceleration: false
     , acceleration: {x:0, y:0, z:0}
     };
@@ -82,11 +82,12 @@ function startGame() {
     , fadingAmmos: {current: [], issued: []}
     , gameOver: false
     , gameOverAge: 0
-    , assumeMobile: false
+    , assumeMobile: true
     } );
 }
 
 function onKeyDown(state, e) {
+  state.input.gettingKeyEvents = true;
   state.input.keysDown[e.keyCode] = true;
 }
 function onKeyUp(state, e) {
@@ -106,7 +107,6 @@ function onMouseDown(state, e) {
 function onDeviceMotion(state, e) {
   if (state.input.haveRecentAcceleration==true) return;
   state.input.haveRecentAcceleration = true;
-  state.input.gettingDeviceMotionEvents = true;
 
   var acc = e.accelerationIncludingGravity;
   acc = {x: acc.x, y: acc.y, z: acc.z};
@@ -124,7 +124,7 @@ function timer(state) {
   var s = state.surface;
   var input = state.input;
 
-  g.assumeMobile = input.gettingDeviceMotionEvents;
+  g.assumeMobile = !input.gettingKeyEvents;
 
   if ( g.gameOver==true
        && (    input.keysDown[input.keyCodes.restart]
@@ -355,7 +355,7 @@ function tick(g, input) {
 
 function inputMovement(input) {
   var v = {x: 0, y: 0};
-  if (input.gettingDeviceMotionEvents) {
+  if (!input.gettingKeyEvents) {
     var acc = input.acceleration;
     var mag = Math.sqrt(acc.x*acc.x + acc.y*acc.y + acc.z*acc.z);
     mag = mag < 0.001 ? 1 : mag;
