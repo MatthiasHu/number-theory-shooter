@@ -715,10 +715,15 @@ function drawTarget(s, tar) {
   }
   else {
     var n = tar.primeFactors.length;
-    var i = Math.floor(tar.flashPhase);
-    var t = tar.flashPhase - i;
-    var lightRadius = 0.07 + 0.03*Math.sin(t*Math.PI);
-    var color = primeColor(tar.primeFactors[i]);
+    var i1 = Math.floor(tar.flashPhase);
+    var i2 = (i1 + 1) % n;
+    var t = tar.flashPhase - i1;
+    var lightRadius = 0.07 + 0.03*Math.abs(Math.cos(t*Math.PI));
+
+    var color = mixColors(
+      primeColor(tar.primeFactors[i1]),
+      primeColor(tar.primeFactors[i2]),
+      Math.sin(t*0.5*Math.PI)**2);
 
     spotlightAt(s, tar.pos, lightRadius, color);
 
